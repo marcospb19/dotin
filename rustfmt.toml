@@ -1,0 +1,11 @@
+# Stable features
+edition = "2021"
+newline_style = "Unix"
+reorder_imports = true
+reorder_modules = true
+use_field_init_shorthand = true
+
+# Unstable features (nightly only)
+unstable_features = true
+group_imports = "StdExternalCrate"
+imports_granularity = "Crate"
