@@ -1,0 +1,15 @@
+[package]
+name = "dotin"
+version = "0.0.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1.0.75"
+clap = "4.4.4"
+fs-err = { version = "2.9.0" }
+fs-tree = { path = "/home/marcospb19/fs-tree" }
+walkdir = "2.4.0"
+
+[dev-dependencies]
+pretty_assertions = "1.4.0"
+tempfile = "3.8.0"
