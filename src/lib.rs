@@ -8,13 +8,17 @@ use fs_err as fs;
 use walkdir::WalkDir;
 
 // Arguments:
-// - home_dir: ~
+// - home_dir: $HOME
 // - folder_path: i3
-pub fn remove_links(home_dir: &Path, dotfile_group_folder_name: &Path) -> anyhow::Result<()> {
+pub fn remove_links(home_dir: &Path, dotfile_group_folder_name: &str) -> anyhow::Result<()> {
     let home_dir = fs::canonicalize(home_dir).unwrap();
+
+    let dotfiles_dir = home_dir.join("dotfiles");
+
     // dotfiles/i3
-    let dotfiles_group_folder =
-        fs::canonicalize(Path::new("dotfiles").join(dotfile_group_folder_name)).unwrap();
+    let dotfiles_group_folder = dotfiles_dir.join(dotfile_group_folder_name);
+    // /home/marcospb19/dotfiles/i3
+    let dotfiles_group_folder = fs::canonicalize(dotfiles_group_folder).unwrap();
 
     for entry in WalkDir::new(&dotfiles_group_folder) {
         let entry = entry?;
@@ -56,10 +60,11 @@ mod tests {
 
     #[test]
     fn test_remove_links() {
+        // Arrange
         let (_dropper, test_dir) = testdir().unwrap();
         env::set_current_dir(test_dir).unwrap();
 
-        let mut home = tree! {
+        let home = tree! {
             ".config": {
                 i3: {
                     config -> same_here
@@ -67,7 +72,7 @@ mod tests {
             }
         };
 
-        let mut dotfiles = tree! {
+        let dotfiles = tree! {
             dotfiles: {
                 i3: {
                     ".config": {
@@ -79,24 +84,25 @@ mod tests {
             }
         };
 
-        home.make_paths_relative();
-        dotfiles.make_paths_relative();
-
         home.create_at(test_dir).unwrap();
         dotfiles.create_at(test_dir).unwrap();
 
-        let i3_folder = test_dir.join("dotfiles").join("i3");
-        remove_links(test_dir, &i3_folder).unwrap();
+        // Act
+        let dotfile_group_name = "i3";
+        remove_links(test_dir, dotfile_group_name).unwrap();
 
+        // Assert
         let expected = tree! {
             ".config": {
-                "./i3": {}
+                i3: {}
             }
         };
 
-        let mut result = FsTree::from_cd_symlink_path(test_dir.join(".config")).unwrap();
-        result.path = ".config".into();
+        // Read back testdir to check the results
+        let result = FsTree::from_path_symlink(test_dir).unwrap();
+        // Ignore `dotfiles/`, just take a look at `.config`
+        let result = &result[".config"];
 
-        assert_eq!(result, expected);
+        assert_eq!(result, &expected);
     }
 }

@@ -8,15 +8,15 @@ use std::{
 // Re-export
 pub use test_utils::testdir;
 
-pub fn get_home_dir() -> &'static Path {
-    &HOME_DIR_PATH
-}
-
 static HOME_DIR_PATH: LazyLock<PathBuf> = LazyLock::new(|| {
     env::var_os("HOME")
         .expect("Failed to read user's home directory, try setting $HOME")
         .into()
 });
+
+pub fn get_home_dir() -> &'static Path {
+    &HOME_DIR_PATH
+}
 
 #[cfg(test)]
 mod test_utils {
