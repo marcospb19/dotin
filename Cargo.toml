@@ -12,3 +12,8 @@ fs-tree = { path = "/home/marcospb19/fs-tree" }
 [dev-dependencies]
 pretty_assertions = "1.4.0"
 tempfile = "3.8.0"
+
+[profile.release]
+strip = true
+opt-level = "z"
+lto = true
