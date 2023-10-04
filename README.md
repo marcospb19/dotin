@@ -25,7 +25,6 @@ Here's the overview, from your home directory, of what it might look like:
 ~/
 ├── .scripts/
 │   ├── volumescript.sh
-│   ├── batteryscript.sh
 │   └── kb-layout-updater.sh
 └── .config/
     └── polybar/
@@ -65,7 +64,6 @@ dotfiles/
 └── polybar/
     ├── .scripts/
     │   ├── volumescript.sh
-    │   ├── batteryscript.sh
     │   └── kb-layout-updater.sh
     └── .config/
         └── polybar/
