@@ -1,7 +1,6 @@
-use std::env;
-
+use anyhow::Context;
 use clap::Parser;
-use dotin::{remove_links, utils::get_home_dir};
+use dotin::{link, unlink, utils::get_home_dir};
 
 #[derive(Parser, Debug)]
 #[command(author, version, about)]
@@ -10,19 +9,28 @@ enum Command {
     Link { groups: Vec<String> },
 }
 
-fn main() {
-    env::set_current_dir("/home/marcospb19").unwrap();
-
-    let home_dir = get_home_dir();
+fn main() -> anyhow::Result<()> {
+    let home_dir = &get_home_dir()?;
+    let dotfiles_folder = home_dir.join("dotfiles");
 
     match Command::parse() {
         Command::Unlink { groups } => {
-            for group in groups {
-                remove_links(home_dir, &group).unwrap();
+            for group in &groups {
+                let dotfiles_group_folder = &dotfiles_folder.join(group);
+
+                unlink(home_dir, dotfiles_group_folder)
+                    .with_context(|| format!("Failed to unlink group \"{group}\""))?;
             }
         }
-        Command::Link { groups: _ } => {
-            todo!("link implementation");
+        Command::Link { groups } => {
+            for group in &groups {
+                let dotfiles_group_folder = &dotfiles_folder.join(group);
+
+                link(home_dir, dotfiles_group_folder)
+                    .with_context(|| format!("Failed to link group \"{group}\""))?;
+            }
         }
     }
+
+    Ok(())
 }

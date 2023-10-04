@@ -1,30 +1,55 @@
 use std::{
     env,
+    os::unix::fs::symlink,
     path::{Path, PathBuf},
-    sync::LazyLock,
 };
 
-#[cfg(test)]
-// Re-export
-pub use test_utils::testdir;
+use anyhow::Context;
+use fs_err as fs;
 
-static HOME_DIR_PATH: LazyLock<PathBuf> = LazyLock::new(|| {
-    env::var_os("HOME")
-        .expect("Failed to read user's home directory, try setting $HOME")
-        .into()
-});
+pub fn get_home_dir() -> anyhow::Result<PathBuf> {
+    let home_env_var =
+        env::var_os("HOME").context("Failed to read user's home directory, try setting $HOME")?;
 
-pub fn get_home_dir() -> &'static Path {
-    &HOME_DIR_PATH
+    fs::canonicalize(&*home_env_var).context("Failed to read path at $HOME")
+}
+
+/// Creates a symlink at `link_location` that points to `original`.
+pub fn create_symlink(link_location: &Path, original: &Path) -> anyhow::Result<()> {
+    symlink(original, link_location).with_context(|| {
+        format!("Failed to create symlink at {link_location:?} pointing to {original:?}")
+    })
 }
 
 #[cfg(test)]
-mod test_utils {
-    use std::{io, path::Path};
+pub mod test_utils {
+    use std::{
+        env, io,
+        path::Path,
+        sync::{Mutex, MutexGuard},
+    };
 
-    pub fn testdir() -> io::Result<(tempfile::TempDir, &'static Path)> {
-        let dir = tempfile::tempdir()?;
-        let path = dir.path().to_path_buf().into_boxed_path();
-        Ok((dir, Box::leak(path)))
+    // I know this is despicable, and I don't care
+
+    static MUTEX: Mutex<()> = Mutex::new(());
+
+    pub struct MutexTempDirHolder {
+        _tempdir: tempfile::TempDir,
+        _guard: MutexGuard<'static, ()>,
+    }
+
+    /// Create a test directory and cd into it
+    pub fn cd_to_testdir() -> io::Result<(MutexTempDirHolder, &'static Path)> {
+        let guard = MUTEX.lock().unwrap();
+        let tempdir = tempfile::tempdir()?;
+        let path = tempdir.path().to_path_buf().into_boxed_path();
+        env::set_current_dir(&path)?;
+
+        let holder = MutexTempDirHolder {
+            _tempdir: tempdir,
+            _guard: guard,
+        };
+
+        Ok((holder, Box::leak(path)))
     }
 }
