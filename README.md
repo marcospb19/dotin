@@ -1,10 +1,12 @@
+**Note**: This project is 3 weeks old, there are rough edges. You might want to wait a little more.
+
 # dotin
 
-A _"dotfiles manager"_ inspired by `stow`, and compatible with `stow`.
+An _Unix dotfiles manager_ inspired by, and a superset of, `stow`.
 
-It uses symlinks to help you manage configuration files and versionate them with `git`.
+It creates symlinks to allow you to versionate your configuration files with `git`.
 
-`dotin` links files to your home directory (`~` or `$HOME`).
+`dotin` is compatible with `stow`, both tools share the same file tree structure.
 
 # Table Of Contents
 
@@ -25,7 +27,7 @@ Here's the overview, from your home directory, of what it might look like:
 ~/
 ├── .scripts/
 │   ├── volumescript.sh
-│   └── kb-layout-updater.sh
+│   └── kb-layout.sh
 └── .config/
     └── polybar/
         ├── config.ini
@@ -34,13 +36,11 @@ Here's the overview, from your home directory, of what it might look like:
 
 Let's call these files the "`polybar` **group**".
 
-After hours of work, you probably want to backup these in order to:
+After hours of work, you probably want to backup these files in order to:
 
-1. Never lose the files.
-2. Easily re-apply these changes in a new machine.
+1. Not lose the files.
+2. Easily re-apply them in another machine.
 3. Keep new changes in sync between machines.
-
-Tip: Check where the tools you use are saving their configuration files!
 
 # How `dotin` helps
 
@@ -54,7 +54,6 @@ First, create the folder that will hold all your configuration groups:
 ```sh
 cd ~
 mkdir dotfiles
-cd dotfiles
 ```
 
 Now, create the group folder `polybar`, and structure it like shown before:
@@ -64,17 +63,26 @@ dotfiles/
 └── polybar/
     ├── .scripts/
     │   ├── volumescript.sh
-    │   └── kb-layout-updater.sh
+    │   └── kb-layout.sh
     └── .config/
         └── polybar/
             ├── config.ini
             └── launch.sh
 ```
 
+(Think of it this way: every path inside of the `polybar` group folder corresponds to the
+same path in your _home directory_.)
+
 Files must be moved to the respective locations.
 
-(Think of it this way: every relative path inside of the `polybar` group folder corresponds to the
-same path in your _$HOME directory_.)
+You move manually or use the `dotin import` command:
+
+```
+dotin import .config/polybar/* .scripts/{volumescript,kb-layout}.sh
+```
+
+<!-- TODO: check if this is called "expansion syntax" -->
+Note: if you're not familiar, this formatting is not a `dotin` feature, but the expansion syntax for your shell (`bash`, `zsh`, and `fish`).
 
 After that's done, run:
 
@@ -82,10 +90,8 @@ After that's done, run:
 dotin link polybar
 ```
 
-Files that live inside of the `dotfiles/polybar` folder are linked to their original home location,
-but now they can live inside of a repository.
-
-TODO: add importer helper.
+Files that live inside of the `polybar` group folder are linked to their original home location,
+but now they actually live inside of a repository.
 
 ## Sync with GitHub
 
@@ -114,15 +120,18 @@ Done, all configuration files were linked to their desired locations.
 
 # Differences from `stow`
 
-`dotin`, right now, isn't much different from `stow`.
+- `dotin` emits a more helpful output.
+- The `import` subcommand.
+- It creates intermediate directories when necessary.
 
-However, `dotin` is a newborn, and suscetible for change, I expect it to be, soon, incrementally
-better, feature-wise.
+`dotin` is an extremely new project, I have stuff in mind to expand it.
 
-## Current differences
+# Known limitations
 
-- `dotin` creates intermediate folders when necessary, `stow` sometimes links them instead of the
-files inside.
+- `dotin` can link regular files and directories, symlinks and other file types are not supported.
+    - Symlinks were supposed to be supported, but Unix makes it impossible to canonicalize the location of a symlink.
+    - I think I have a workaround for that, but I didn't implemented that, yet.
+- Changing dotfiles folder and home folder is not supported yet.
 
 # Alternatives
 

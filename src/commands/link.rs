@@ -4,7 +4,7 @@ use anyhow::Context;
 use fs_err as fs;
 use fs_tree::FsTree;
 
-use crate::utils::create_symlink;
+use crate::utils;
 
 pub fn link(
     home_dir: impl AsRef<Path>,
@@ -70,7 +70,8 @@ pub fn link(
         } else {
             // Only leaves should be linked
             if dotfiles_node.is_leaf() {
-                create_symlink(&home_path, &absolute_dotfiles_path)?;
+                utils::create_symlink(&home_path, &absolute_dotfiles_path)?;
+
                 println!(
                     "Linked {} at {relative_path:?}",
                     dotfiles_node.variant_str()
@@ -117,14 +118,7 @@ mod tests {
             }
         };
 
-        home.write_at(".").unwrap();
-        dotfiles.write_at(".").unwrap();
-
-        // Act
-        link(".", Path::new("dotfiles/i3")).unwrap();
-
-        // Assert
-        let expected = {
+        let expected_home = {
             let mut tree = tree! {
                 ".config": {
                     i3: {}
@@ -136,7 +130,14 @@ mod tests {
             tree
         };
 
-        let result = expected.symlink_read_copy_at(".").unwrap();
-        assert_eq!(result, expected);
+        home.write_at(".").unwrap();
+        dotfiles.write_at(".").unwrap();
+
+        // Act
+        link(test_dir, test_dir.join("dotfiles/i3")).unwrap();
+
+        // Assert
+        let result = expected_home.symlink_read_copy_at(".").unwrap();
+        assert_eq!(result, expected_home);
     }
 }

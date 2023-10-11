@@ -1,13 +1,21 @@
+use std::path::PathBuf;
+
 use anyhow::Context;
 use clap::Parser;
 use dotin::{
-    commands::{link, unlink},
+    commands::{import, link, unlink},
     utils::get_home_dir,
 };
 
 #[derive(Parser, Debug)]
 #[command(version, about)]
 enum Command {
+    /// Helper to bulk-move files into a group folder.
+    Import {
+        group_name: String,
+        #[clap(required = true)]
+        files: Vec<PathBuf>,
+    },
     /// For each provided group, create link for their files.
     Link { groups: Vec<String> },
     /// For each provided group, delete the links created.
@@ -42,6 +50,12 @@ fn main() -> anyhow::Result<()> {
                 link(home_dir, dotfiles_group_folder)
                     .with_context(|| format!("Failed to link group \"{group}\""))
             })
+        }
+        Command::Import { group_name, files } => {
+            let dotfiles_group_folder = &dotfiles_folder.join(&group_name);
+
+            import(home_dir, dotfiles_group_folder, &files)
+                .with_context(|| format!("Failed to import files for group \"{group_name}\""))
         }
     }
 }

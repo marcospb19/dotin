@@ -81,20 +81,20 @@ mod tests {
             }
         };
 
-        home.write_at(".").unwrap();
-        dotfiles.write_at(".").unwrap();
-
-        // Act
-        unlink(".", Path::new("dotfiles/i3")).unwrap();
-
-        // Assert
-        let expected = tree! {
+        let expected_home = tree! {
             ".config": {
                 i3: {}
             }
         };
 
+        home.write_at(".").unwrap();
+        dotfiles.write_at(".").unwrap();
+
+        // Act
+        unlink(test_dir, test_dir.join("dotfiles/i3")).unwrap();
+
+        // Assert
         let result = home.symlink_read_copy_at(".").unwrap();
-        assert_eq!(result, expected);
+        assert_eq!(result, expected_home);
     }
 }

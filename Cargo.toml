@@ -7,8 +7,9 @@ description = "A simple dotfiles manager inspired by `stow`."
 [dependencies]
 anyhow = "1.0.75"
 clap = { version = "4.4.4", features = ["derive"] }
+file_type_enum = "2.0.1"
 fs-err = { version = "2.9.0" }
-fs-tree = { path = "/home/marcospb19/fs-tree" }
+fs-tree = "0.5.5"
 
 [dev-dependencies]
 pretty_assertions = "1.4.0"
