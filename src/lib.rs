@@ -1,4 +1,4 @@
-// TODO: somehow remove this requirement
+// TODO: remove this requirement
 #![feature(mutex_unpoison)]
 
 pub mod commands;
