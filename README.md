@@ -89,7 +89,13 @@ dotfiles/
 You can move the files manually, or use the `dotin import` command:
 
 ```sh
-dotin import .config/polybar/* .scripts/{volumescript,kb-layout}.sh
+dotin import polybar .config/polybar/* .scripts/{volumescript,kb-layout}.sh
+```
+
+This is the command syntax:
+
+```sh
+dotin import <GROUP_NAME> [FILES...]
 ```
 
 <details>
