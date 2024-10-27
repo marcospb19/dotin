@@ -24,11 +24,7 @@ pub fn link(home_dir: &Path, group_dir: &Path, group_name: &str) -> anyhow::Resu
             continue;
         }
 
-        // for the current file, get its absolute path in the dotfiles folder
-        // and where it's expected to be in the home directory
-        let group_absolute = group_dir.join(&relative_path);
         let home_absolute = home_dir.join(&relative_path);
-
         let symlink_target = symlink_target_path(&relative_path, group_name);
 
         // if already exists at home
@@ -42,7 +38,7 @@ pub fn link(home_dir: &Path, group_dir: &Path, group_name: &str) -> anyhow::Resu
                         }
                     } else {
                         println!(
-                            "ERROR: {home_absolute:?} exists but points to {current_target:?} instead of {group_absolute:?}"
+                            "ERROR: {home_absolute:?} exists but points to {current_target:?} instead of {symlink_target:?}"
                         );
                     }
                 } else {
