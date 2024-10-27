@@ -38,14 +38,13 @@ pub fn create_folder_at(folder_path: &Path) -> anyhow::Result<()> {
 
     match file_type {
         Ok(FileType::Directory) => Ok(()),
-        Ok(file_type) => bail!(
-            "Cannot create folder at {folder_path:?} because there's a {file_type} at that path"
-        ),
-        Err(err) if err.kind() == io::ErrorKind::NotFound => fs::create_dir_all(folder_path)
-            .with_context(|| format!("Failed to create foder at {folder_path:?}")),
-        Err(err) => Err(err)
-            .with_context(|| format!("Failed to check if a folder {folder_path:?} already exists")),
+        Ok(file_type) => {
+            bail!("can't create folder at {folder_path:?}, a {file_type} exists at that path")
+        }
+        Err(err) if err.kind() == io::ErrorKind::NotFound => fs::create_dir_all(folder_path),
+        Err(err) => Err(err),
     }
+    .context("creating folder")
 }
 
 pub fn dedup_nested(paths: &mut Vec<&Path>) {

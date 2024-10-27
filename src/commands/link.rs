@@ -6,15 +6,8 @@ use fs_tree::FsTree;
 
 use crate::utils::{self, symlink_target_path};
 
-pub fn link(
-    home_dir: impl AsRef<Path>,
-    group_path: impl AsRef<Path>,
-    group_name: &str,
-) -> anyhow::Result<()> {
-    let home_dir = home_dir.as_ref();
-    let group_path = group_path.as_ref();
-
-    let group_tree = FsTree::symlink_read_at(group_path).context("reading dotfiles folder tree")?;
+pub fn link(home_dir: &Path, group_dir: &Path, group_name: &str) -> anyhow::Result<()> {
+    let group_tree = FsTree::symlink_read_at(group_dir).context("reading dotfiles folder tree")?;
 
     let home_tree = group_tree
         .symlink_read_copy_at(&home_dir)
@@ -33,7 +26,7 @@ pub fn link(
 
         // for the current file, get its absolute path in the dotfiles folder
         // and where it's expected to be in the home directory
-        let group_absolute = group_path.join(&relative_path);
+        let group_absolute = group_dir.join(&relative_path);
         let home_absolute = home_dir.join(&relative_path);
 
         let symlink_target = symlink_target_path(&relative_path, group_name);
@@ -121,7 +114,7 @@ mod tests {
         dotfiles.write_at(".").unwrap();
 
         // Act
-        link(test_dir, test_dir.join("dotfiles/i3"), "i3").unwrap();
+        link(test_dir, &test_dir.join("dotfiles/i3"), "i3").unwrap();
 
         // Assert
         let result = expected_home.symlink_read_copy_at(".").unwrap();

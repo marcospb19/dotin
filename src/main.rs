@@ -22,7 +22,13 @@ enum Command {
     Unlink { groups: Vec<String> },
 }
 
-fn main() -> anyhow::Result<()> {
+fn main() {
+    if let Err(err) = run() {
+        eprintln!("EXITING: ERROR: {err}");
+    }
+}
+
+fn run() -> anyhow::Result<()> {
     let home_dir = &get_home_dir()?;
     let dotfiles_folder = home_dir.join("dotfiles");
 

@@ -6,16 +6,8 @@ use fs_tree::FsTree;
 
 use crate::utils::symlink_target_path;
 
-pub fn unlink(
-    home_dir: impl AsRef<Path>,
-    group_path: impl AsRef<Path>,
-    group_name: &str,
-) -> anyhow::Result<()> {
-    let home_dir = home_dir.as_ref();
-    let group_path = group_path.as_ref();
-
-    let group_tree = FsTree::symlink_read_at(&group_path)
-        .with_context(|| format!("Failed to read dotfiles folder at {group_path:?}"))?;
+pub fn unlink(home_dir: &Path, group_dir: &Path, group_name: &str) -> anyhow::Result<()> {
+    let group_tree = FsTree::symlink_read_at(group_dir).context("reading dotfiles folder tree")?;
 
     let home_tree = group_tree
         .symlink_read_copy_at(&home_dir)
@@ -86,7 +78,7 @@ mod tests {
         dotfiles.write_at(".").unwrap();
 
         // Act
-        unlink(test_dir, test_dir.join("dotfiles/i3"), "i3").unwrap();
+        unlink(test_dir, &test_dir.join("dotfiles/i3"), "i3").unwrap();
 
         // Assert
         let result = home.symlink_read_copy_at(".").unwrap();

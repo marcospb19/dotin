@@ -15,23 +15,16 @@ struct FileToMove<'a> {
     to_path: PathBuf,
 }
 
-pub fn import(
-    home_dir: impl AsRef<Path>,
-    dotfiles_group_folder: impl AsRef<Path>,
-    files: &[PathBuf],
-) -> anyhow::Result<()> {
+pub fn import(home_dir: &Path, group_dir: &Path, files: &[PathBuf]) -> anyhow::Result<()> {
     assert!(
         !files.is_empty(),
         "`dotin import` file list cannot be empty, this should be ensured by `cli` definitions",
     );
 
-    let home_dir = home_dir.as_ref();
-    let dotfiles_group_folder = dotfiles_group_folder.as_ref();
-    let dotfiles_folder = dotfiles_group_folder
+    let dotfiles_folder = group_dir
         .parent()
         .expect("Internal error, malformed dotfiles folder");
 
-    // TODO: resolver esse problema
     let absolute_paths: Vec<PathBuf> = files
         .iter()
         .map(fs::canonicalize)
@@ -59,12 +52,12 @@ pub fn import(
 
             // If the file is itself a symlink.
             if is_file_symlink {
-                println!("Warning, {path:?} because it lives inside of the dotfiles directory");
+                println!("ERROR: the file you're trying to move {path:?} is a symlink itself, I'm not quite sure if you really meant to move it to the group folder, please handle it manually");
             }
 
             // Is file inside of `home_dir`? If not, throw error.
             if let Ok(normalized_path) = absolute_path.strip_prefix(&home_dir) {
-                let to_path = dotfiles_group_folder.join(normalized_path);
+                let to_path = group_dir.join(normalized_path);
 
                 let file = FileToMove { path, to_path };
                 files_to_move.push(file);
@@ -83,9 +76,7 @@ pub fn import(
         println!("No files to move.");
     }
 
-    utils::create_folder_at(dotfiles_group_folder).with_context(|| {
-        format!("Failed to create folder for the group {dotfiles_group_folder:?}")
-    })?;
+    utils::create_folder_at(group_dir).context("create folder for group")?;
 
     for FileToMove { to_path, .. } in &files_to_move {
         // Check if files at destination already exist
@@ -105,7 +96,7 @@ pub fn import(
             if !parent_directory.is_dir() {
                 panic!("Cannot create file at {parent_directory:?}, there's a file there.");
             }
-        } else if parent_directory != dotfiles_group_folder {
+        } else if parent_directory != group_dir {
             intermediate_directories_to_create.push(parent_directory);
         }
     }
@@ -247,7 +238,7 @@ mod tests {
 
         import(
             test_dir,
-            test_dir.join("dotfiles/group_name"),
+            &test_dir.join("dotfiles/group_name"),
             &files_to_import,
         )
         .unwrap();
