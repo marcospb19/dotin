@@ -58,7 +58,7 @@ pub fn link(
                         home_node.variant_str(),
                     );
                 }
-            } else if group_node.is_dir() {
+            } else if home_node.is_dir() {
                 // great! directory found where non-leaf was expected, no need to create one
             } else {
                 println!("ERROR: can't create link at {home_absolute:?} because it's a directory");
