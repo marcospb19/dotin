@@ -153,6 +153,7 @@ Conflicts happen when there is a file at the desired link location, and creating
 
 - The `import` subcommand.
 - It creates intermediate directories when necessary.
+- Expects "$HOME/dotfiles" and can be run from any directory.
 
 That's not much, `dotin` is a newborn and might deviate more in the future.
 

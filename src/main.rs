@@ -47,7 +47,7 @@ fn main() -> anyhow::Result<()> {
             groups.iter().try_for_each(|group| {
                 let dotfiles_group_folder = &dotfiles_folder.join(group);
 
-                link(home_dir, dotfiles_group_folder)
+                link(home_dir, dotfiles_group_folder, &group)
                     .with_context(|| format!("Failed to link group \"{group}\""))
             })
         }
