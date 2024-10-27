@@ -41,7 +41,10 @@ pub fn create_folder_at(folder_path: &Path) -> anyhow::Result<()> {
         Ok(file_type) => {
             bail!("can't create folder at {folder_path:?}, a {file_type} exists at that path")
         }
-        Err(err) if err.kind() == io::ErrorKind::NotFound => fs::create_dir_all(folder_path),
+        Err(err) if err.kind() == io::ErrorKind::NotFound => {
+            println!("creating folder at {folder_path:?}");
+            fs::create_dir_all(folder_path)
+        }
         Err(err) => Err(err),
     }
     .context("creating folder")
