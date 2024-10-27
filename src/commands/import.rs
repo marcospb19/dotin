@@ -243,9 +243,9 @@ mod tests {
         )
         .unwrap();
 
-        let home_result = expected_home.symlink_read_copy_at(".").unwrap();
+        let home_result = expected_home.symlink_read_structure_at(".").unwrap();
         assert_eq!(home_result, expected_home);
-        let dotfiles_result = expected_dotfiles.symlink_read_copy_at(".").unwrap();
+        let dotfiles_result = expected_dotfiles.symlink_read_structure_at(".").unwrap();
         assert_eq!(dotfiles_result, expected_dotfiles);
     }
 }

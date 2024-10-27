@@ -10,7 +10,7 @@ pub fn link(home_dir: &Path, group_dir: &Path, group_name: &str) -> anyhow::Resu
     let group_tree = FsTree::symlink_read_at(group_dir).context("reading dotfiles folder tree")?;
 
     let home_tree = group_tree
-        .symlink_read_copy_at(home_dir)
+        .symlink_read_structure_at(home_dir)
         .context("reading structured file tree at home directory")?;
 
     let mut intermediate_directories_linked = vec![];
@@ -113,7 +113,7 @@ mod tests {
         link(test_dir, &test_dir.join("dotfiles/i3"), "i3").unwrap();
 
         // Assert
-        let result = expected_home.symlink_read_copy_at(".").unwrap();
+        let result = expected_home.symlink_read_structure_at(".").unwrap();
         assert_eq!(result, expected_home);
     }
 }
