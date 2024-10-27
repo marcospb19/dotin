@@ -10,7 +10,7 @@ pub fn link(home_dir: &Path, group_dir: &Path, group_name: &str) -> anyhow::Resu
     let group_tree = FsTree::symlink_read_at(group_dir).context("reading dotfiles folder tree")?;
 
     let home_tree = group_tree
-        .symlink_read_copy_at(&home_dir)
+        .symlink_read_copy_at(home_dir)
         .context("reading structured file tree at home directory")?;
 
     let mut intermediate_directories_linked = vec![];

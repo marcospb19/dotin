@@ -41,7 +41,7 @@ fn run() -> anyhow::Result<()> {
             groups.iter().try_for_each(|group| {
                 let dotfiles_group_folder = &dotfiles_folder.join(group);
 
-                unlink(home_dir, dotfiles_group_folder, &group)
+                unlink(home_dir, dotfiles_group_folder, group)
                     .with_context(|| format!("Failed to unlink group \"{group}\""))
             })
         }
@@ -53,7 +53,7 @@ fn run() -> anyhow::Result<()> {
             groups.iter().try_for_each(|group| {
                 let dotfiles_group_folder = &dotfiles_folder.join(group);
 
-                link(home_dir, dotfiles_group_folder, &group)
+                link(home_dir, dotfiles_group_folder, group)
                     .with_context(|| format!("Failed to link group \"{group}\""))
             })
         }

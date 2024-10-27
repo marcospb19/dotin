@@ -10,7 +10,7 @@ pub fn unlink(home_dir: &Path, group_dir: &Path, group_name: &str) -> anyhow::Re
     let group_tree = FsTree::symlink_read_at(group_dir).context("reading dotfiles folder tree")?;
 
     let home_tree = group_tree
-        .symlink_read_copy_at(&home_dir)
+        .symlink_read_copy_at(home_dir)
         .context("Failed to read dotfiles tree at home directory")?;
 
     for (node, relative_path) in home_tree.iter() {

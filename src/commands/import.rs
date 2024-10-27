@@ -56,7 +56,7 @@ pub fn import(home_dir: &Path, group_dir: &Path, files: &[PathBuf]) -> anyhow::R
             }
 
             // Is file inside of `home_dir`? If not, throw error.
-            if let Ok(normalized_path) = absolute_path.strip_prefix(&home_dir) {
+            if let Ok(normalized_path) = absolute_path.strip_prefix(home_dir) {
                 let to_path = group_dir.join(normalized_path);
 
                 let file = FileToMove { path, to_path };

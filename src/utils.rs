@@ -30,7 +30,7 @@ pub fn symlink_target_path(relative_path: &Path, group_name: &str) -> PathBuf {
     path_out_of_nesting
         .join("dotfiles")
         .join(group_name)
-        .join(&relative_path)
+        .join(relative_path)
 }
 
 pub fn create_folder_at(folder_path: &Path) -> anyhow::Result<()> {
