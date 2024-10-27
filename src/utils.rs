@@ -1,5 +1,6 @@
 use std::{
     env, io,
+    iter::repeat_n,
     os::unix::fs::{symlink, MetadataExt},
     path::{Path, PathBuf},
 };
@@ -20,6 +21,16 @@ pub fn create_symlink(link_location: &Path, original: &Path) -> anyhow::Result<(
     symlink(original, link_location).with_context(|| {
         format!("Failed to create symlink at {link_location:?} pointing to {original:?}")
     })
+}
+
+/// Creates the path for a symlink at `the/relative/path` to `../../dotfiles/GROUP/the/relative/path`
+pub fn symlink_target_path(relative_path: &Path, group_name: &str) -> PathBuf {
+    let nestedness = relative_path.components().count().saturating_sub(1);
+    let path_out_of_nesting = repeat_n(Path::new("../"), nestedness).collect::<PathBuf>();
+    path_out_of_nesting
+        .join("dotfiles")
+        .join(group_name)
+        .join(&relative_path)
 }
 
 pub fn create_folder_at(folder_path: &Path) -> anyhow::Result<()> {

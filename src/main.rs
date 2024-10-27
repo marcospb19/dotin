@@ -10,15 +10,15 @@ use dotin::{
 #[derive(Parser, Debug)]
 #[command(version, about)]
 enum Command {
-    /// Helper to bulk-move files into a group folder.
+    /// Smartly import files into a dotfiles group (doesn't link).
     Import {
         group_name: String,
         #[clap(required = true)]
         files: Vec<PathBuf>,
     },
-    /// For each provided group, create link for their files.
+    /// Link files for the provided group(s).
     Link { groups: Vec<String> },
-    /// For each provided group, delete the links created.
+    /// Unink files for the provided group(s).
     Unlink { groups: Vec<String> },
 }
 
@@ -35,7 +35,7 @@ fn main() -> anyhow::Result<()> {
             groups.iter().try_for_each(|group| {
                 let dotfiles_group_folder = &dotfiles_folder.join(group);
 
-                unlink(home_dir, dotfiles_group_folder)
+                unlink(home_dir, dotfiles_group_folder, &group)
                     .with_context(|| format!("Failed to unlink group \"{group}\""))
             })
         }
