@@ -18,7 +18,7 @@ enum Command {
     },
     /// Link files for the provided group(s).
     Link { groups: Vec<String> },
-    /// Unink files for the provided group(s).
+    /// Unlink files for the provided group(s).
     Unlink { groups: Vec<String> },
 }
 
