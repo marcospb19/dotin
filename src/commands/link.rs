@@ -78,7 +78,6 @@ mod tests {
 
     #[test]
     fn test_link() {
-        // Arrange
         let (_dropper, test_dir) = cd_to_testdir().unwrap();
 
         let home = tree! {
@@ -109,10 +108,8 @@ mod tests {
         home.write_at(".").unwrap();
         dotfiles.write_at(".").unwrap();
 
-        // Act
         link(test_dir, &test_dir.join("dotfiles/i3"), "i3").unwrap();
 
-        // Assert
         let result = expected_home.symlink_read_structure_at(".").unwrap();
         assert_eq!(result, expected_home);
     }

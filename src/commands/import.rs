@@ -155,55 +155,58 @@ mod tests {
 
     #[test]
     fn test_import() {
-        // Arrange
         let (_dropper, test_dir) = cd_to_testdir().unwrap();
 
         let files_to_import = [
-            "dir_to_move",
-            "existing_intermediate_dir/missing_file",
-            "missing_intermediate_dir/file",
-            "missing_intermediate_dir/intermediate_dir/another_dir_to_move",
-            "missing_intermediate_dir/intermediate_dir/inner_file",
+            "move_1_full_dir",
+            "partial_move_2_merging_dir/move_3",
+            "partial_move_7_new_dir/move_4",
+            "partial_move_7_new_dir/partial_move_8_new_dir/move_5_full_dir",
+            "partial_move_7_new_dir/partial_move_8_new_dir/move_6",
         ]
         .map(PathBuf::from);
 
         let home = tree! {
-            unrelated_file_1
-            dir_to_move: {
-                file_inside_dir_to_move
+            stays_1
+            move_1_full_dir: {
+                moved_with_folder_1
             }
-            missing_intermediate_dir: {
-                file
-                intermediate_dir: {
-                    inner_file
-                    another_dir_to_move: {
-                        file_inside_another_dir_to_move
+            partial_move_7_new_dir: {
+                move_4
+                partial_move_8_new_dir: {
+                    stays_2
+                    move_6
+                    move_5_full_dir: {
+                        moved_with_folder_5
                     }
                 }
-                unrelated_file_2
+                stays_3
             }
-            existing_intermediate_dir: {
-                existing_file
-                missing_file
+            partial_move_2_merging_dir: {
+                stays_4
+                move_3
             }
         };
 
         let expected_home = tree! {
-            unrelated_file_1
-            missing_intermediate_dir: {
-                intermediate_dir: {}
-                unrelated_file_2
+            stays_1
+            partial_move_7_new_dir: {
+                partial_move_8_new_dir: {
+                    stays_2
+                }
+                stays_3
             }
-            existing_intermediate_dir: {
-                existing_file
+            partial_move_2_merging_dir: {
+                stays_4
             }
         };
 
         let dotfiles = tree! {
             dotfiles: {
+                dotfiles_untouched_file
                 group_name: {
-                    existing_intermediate_dir: {
-                        existing_file
+                    partial_move_2_merging_dir: {
+                        moved_with_folder_4
                     }
                 }
             }
@@ -211,22 +214,23 @@ mod tests {
 
         let expected_dotfiles = tree! {
             dotfiles: {
+                dotfiles_untouched_file
                 group_name: {
-                    dir_to_move: {
-                        file_inside_dir_to_move
+                    move_1_full_dir: {
+                        moved_with_folder_1
                     }
-                    missing_intermediate_dir: {
-                        file
-                        intermediate_dir: {
-                            inner_file
-                            another_dir_to_move: {
-                                file_inside_another_dir_to_move
+                    partial_move_7_new_dir: {
+                        move_4
+                        partial_move_8_new_dir: {
+                            move_6
+                            move_5_full_dir: {
+                                moved_with_folder_5
                             }
                         }
                     }
-                    existing_intermediate_dir: {
-                        existing_file
-                        missing_file
+                    partial_move_2_merging_dir: {
+                        moved_with_folder_4
+                        move_3
                     }
                 }
             }
