@@ -117,3 +117,31 @@ pub mod test_utils {
         Ok((holder, Box::leak(path)))
     }
 }
+
+/// Get all existing groups in the dotfiles folder
+pub fn read_all_groups(dotfiles_folder: &Path) -> anyhow::Result<Vec<String>> {
+    let mut groups = vec![];
+
+    let read_iter = fs::read_dir(dotfiles_folder)
+        .with_context(|| format!("Failed to read dotfiles folder at {:?}", dotfiles_folder))?;
+
+    for group in read_iter {
+        let group =
+            group.with_context(|| format!("Failed to group folder inside dotfiles directory"))?;
+
+        let path = group.path();
+        if !path.is_dir() {
+            continue;
+        }
+
+        let group_name = path
+            .file_name()
+            .expect("reading a folder always yields paths with valid filenames")
+            .to_str()
+            .with_context(|| format!("group name can't be invalid UTF-8"))?;
+
+        groups.push(group_name.to_owned());
+    }
+
+    Ok(groups)
+}
