@@ -1,58 +1,48 @@
-use std::{
-    io,
-    path::{Path, PathBuf},
-};
+use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Context};
-use file_type_enum::FileType;
 use fs_err as fs;
 
 use crate::utils::{self, FileToMove};
 
-pub fn import(home_dir: &Path, group_dir: &Path, files: &[PathBuf]) -> anyhow::Result<()> {
-    let dotfiles_folder = group_dir
-        .parent()
-        .expect("Internal error, malformed dotfiles folder");
+pub fn discard(home_dir: &Path, group_dir: &Path, files: &[PathBuf]) -> anyhow::Result<()> {
+    // TODO:  ja comecou errado, ele por algum motivo achou que esses arquivos n existem pq deu erro na hora de canonicalizar, mas na vdd o problema deve ta no path que eh passado no teste, que agora tem que refletir o real path dos arquivos dentro do dotfiles/GROUP folder
 
+    // Convert paths to absolute (but don't canonicalize since they don't exist yet)
     let absolute_paths: Vec<PathBuf> = files
         .iter()
-        .map(fs::canonicalize)
-        .collect::<io::Result<_>>()?;
+        .map(|p| {
+            if p.is_absolute() {
+                p.clone()
+            } else {
+                std::env::current_dir().unwrap().join(p)
+            }
+        })
+        .collect();
 
     let files_to_move = {
         let mut files_to_move: Vec<FileToMove> = vec![];
 
         for (absolute_path, path) in absolute_paths.iter().zip(files) {
-            let is_file_symlink =
-                FileType::symlink_read_at(path).is_ok_and(|file_type| file_type.is_symlink());
-
-            // Is file inside of `dotfiles_folder`? Skip it.
-            if let Ok(normalized_path) = absolute_path.strip_prefix(dotfiles_folder) {
-                if is_file_symlink {
-                    println!(
-                        "Skipping {path:?}, it's already a symlink, and it points to \
-                         {normalized_path:?}, which is inside of the dotfiles directory."
-                    );
-                } else {
-                    println!("Skipping {path:?} because it lives inside of the dotfiles directory");
-                }
-                continue;
-            }
-
-            // If the file is itself a symlink.
-            if is_file_symlink {
-                println!("ERROR: the file you're trying to move {path:?} is a symlink itself, I'm not quite sure if you really meant to move it to the group folder, please handle it manually");
-            }
-
             // Is file inside of `home_dir`? If not, throw error.
+            // The paths represent where files should be restored to in home.
             if let Ok(normalized_path) = absolute_path.strip_prefix(home_dir) {
-                let to_path = group_dir.join(normalized_path);
+                // Check if source file exists in group_dir
+                let source_path = group_dir.join(normalized_path);
+                if !source_path.exists() {
+                    bail!(
+                        "Cannot discard {path:?}: source file {source_path:?} does not exist in group directory"
+                    );
+                }
 
-                let file = FileToMove { path, to_path };
+                let file = FileToMove {
+                    path: normalized_path,
+                    to_path: absolute_path.clone(),
+                };
                 files_to_move.push(file);
             } else {
                 bail!(
-                    "`dotin` can only import files inside of home directory {home_dir:?}, \
+                    "`dotin discard` expects paths relative to home directory {home_dir:?}, \
                      but {path:?} seems to be outside of it."
                 );
             }
@@ -65,13 +55,10 @@ pub fn import(home_dir: &Path, group_dir: &Path, files: &[PathBuf]) -> anyhow::R
         println!("No files to move.");
     }
 
-    utils::create_folder_at(group_dir).context("create folder for group")?;
-
     for FileToMove { to_path, .. } in &files_to_move {
         // Check if files at destination already exist
-        // TODO: this isn't considering symlinks
         if to_path.exists() {
-            panic!("File at {to_path:?} already exists, and cannot be imported");
+            panic!("File at {to_path:?} already exists, and cannot be discarded there");
         }
     }
 
@@ -84,7 +71,7 @@ pub fn import(home_dir: &Path, group_dir: &Path, files: &[PathBuf]) -> anyhow::R
             if !parent_directory.is_dir() {
                 panic!("Cannot create file at {parent_directory:?}, there's a file there.");
             }
-        } else if parent_directory != group_dir {
+        } else if parent_directory != home_dir {
             intermediate_directories_to_create.push(parent_directory);
         }
     }
@@ -106,14 +93,14 @@ pub fn import(home_dir: &Path, group_dir: &Path, files: &[PathBuf]) -> anyhow::R
         println!();
     }
 
-    // Check if files at destination already exist
+    // Check if files can be moved (same filesystem)
     for FileToMove { path, to_path } in &files_to_move {
+        let source_path = group_dir.join(path);
         let parent_directory = to_path.parent().unwrap();
 
-        // Check if file cannot be moved
-        if !utils::are_in_the_same_filesystem(path, parent_directory)? {
+        if !utils::are_in_the_same_filesystem(&source_path, parent_directory)? {
             bail!(
-                "Cannot move file {path:?} to folder {parent_directory:?} because they're \
+                "Cannot move file {source_path:?} to folder {parent_directory:?} because they're \
                 not in the same filesystem"
             );
         }
@@ -124,9 +111,10 @@ pub fn import(home_dir: &Path, group_dir: &Path, files: &[PathBuf]) -> anyhow::R
         files_to_move.len(),
     );
 
-    // Check if files at destination already exist
+    // Move files from group_dir to home_dir
     for FileToMove { path, to_path } in &files_to_move {
-        fs::rename(path, to_path).context("Failed to move file")?;
+        let source_path = group_dir.join(path);
+        fs::rename(&source_path, to_path).context("Failed to move file")?;
     }
 
     println!("Done.");
@@ -143,10 +131,10 @@ mod tests {
     use crate::utils::test_utils::cd_to_testdir;
 
     #[test]
-    fn test_import() {
+    fn test_discard() {
         let (_dropper, test_dir) = cd_to_testdir().unwrap();
 
-        let files_to_import = [
+        let files_to_discard = [
             "move_1_full_dir",
             "partial_move_2_merging_dir/move_3",
             "partial_move_7_new_dir/move_4",
@@ -156,6 +144,19 @@ mod tests {
         .map(PathBuf::from);
 
         let home = tree! {
+            stays_1
+            partial_move_7_new_dir: {
+                partial_move_8_new_dir: {
+                    stays_2
+                }
+                stays_3
+            }
+            partial_move_2_merging_dir: {
+                stays_4
+            }
+        };
+
+        let expected_home = tree! {
             stays_1
             move_1_full_dir: {
                 moved_with_folder_1
@@ -177,31 +178,7 @@ mod tests {
             }
         };
 
-        let expected_home = tree! {
-            stays_1
-            partial_move_7_new_dir: {
-                partial_move_8_new_dir: {
-                    stays_2
-                }
-                stays_3
-            }
-            partial_move_2_merging_dir: {
-                stays_4
-            }
-        };
-
         let dotfiles = tree! {
-            dotfiles: {
-                dotfiles_untouched_file
-                group_name: {
-                    partial_move_2_merging_dir: {
-                        moved_with_folder_4
-                    }
-                }
-            }
-        };
-
-        let expected_dotfiles = tree! {
             dotfiles: {
                 dotfiles_untouched_file
                 group_name: {
@@ -225,19 +202,30 @@ mod tests {
             }
         };
 
-        home.write_at(".").unwrap();
-        dotfiles.write_at(".").unwrap();
+        let expected_dotfiles = tree! {
+            dotfiles: {
+                dotfiles_untouched_file
+                group_name: {
+                    partial_move_2_merging_dir: {
+                        moved_with_folder_4
+                    }
+                }
+            }
+        };
 
-        import(
+        dotfiles.write_at(".").unwrap();
+        home.write_at(".").unwrap();
+
+        discard(
             test_dir,
             &test_dir.join("dotfiles/group_name"),
-            &files_to_import,
+            &files_to_discard,
         )
         .unwrap();
 
-        let home_result = expected_home.symlink_read_structure_at(".").unwrap();
-        assert_eq!(home_result, expected_home);
         let dotfiles_result = expected_dotfiles.symlink_read_structure_at(".").unwrap();
         assert_eq!(dotfiles_result, expected_dotfiles);
+        let home_result = expected_home.symlink_read_structure_at(".").unwrap();
+        assert_eq!(home_result, expected_home);
     }
 }

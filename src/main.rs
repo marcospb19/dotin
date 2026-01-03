@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use anyhow::Context;
 use clap::Parser;
 use dotin::{
-    commands::{import, link, unlink},
+    commands::{discard, import, link, unlink},
     utils::{get_home_dir, read_all_groups},
 };
 
@@ -16,11 +16,17 @@ enum Command {
         #[clap(required = true)]
         files: Vec<PathBuf>,
     },
+    /// Moves files from the dotfiles group folder back to their original location (reverse operation of `dotin import`)
+    Discard {
+        group_name: String,
+        #[clap(required = true)]
+        files: Vec<PathBuf>,
+    },
     /// Link dotfiles groups into their target position
     Link {
         groups: Vec<String>,
         /// Link all groups in the dotfiles folder
-        #[clap(long)]
+        #[clap(long, conflicts_with = "groups", required_unless_present = "groups")]
         all: bool,
     },
     /// Removes links created by the `link` command
@@ -37,16 +43,17 @@ fn run() -> anyhow::Result<()> {
     let home_dir = &get_home_dir()?;
     let dotfiles_folder = home_dir.join("dotfiles");
 
-    match Command::parse() {
+    let command = Command::parse();
+
+    match command {
         Command::Unlink { groups } => {
             if groups.is_empty() {
-                println!("No group list provided.");
+                println!("list of groups to unlink is empty.");
+                return Ok(());
             }
 
             for group in &groups {
-                let dotfiles_group_folder = &dotfiles_folder.join(group);
-
-                unlink(home_dir, dotfiles_group_folder, group)
+                unlink(home_dir, &dotfiles_folder.join(group), group)
                     .with_context(|| format!("Failed to unlink group \"{group}\""))?;
             }
         }
@@ -58,21 +65,31 @@ fn run() -> anyhow::Result<()> {
             };
 
             if groups_to_link.is_empty() {
-                println!("No group list provided.");
+                println!("list of groups to link is empty.");
+                return Ok(());
             }
 
             for group in &groups_to_link {
-                let dotfiles_group_folder = &dotfiles_folder.join(group);
-
-                link(home_dir, dotfiles_group_folder, group)
+                link(home_dir, &dotfiles_folder.join(group), group)
                     .with_context(|| format!("Failed to link group \"{group}\""))?;
             }
         }
         Command::Import { group_name, files } => {
-            let dotfiles_group_folder = &dotfiles_folder.join(&group_name);
-
-            import(home_dir, dotfiles_group_folder, &files)
+            assert!(!files.is_empty(), "ensured by CLI definitions");
+            import(home_dir, &dotfiles_folder.join(&group_name), &files)
                 .with_context(|| format!("Failed to import files for group \"{group_name}\""))?;
+        }
+        Command::Discard { group_name, files } => {
+            assert!(!files.is_empty(), "ensured by CLI definitions");
+            if !dotfiles_folder.join(&group_name).exists() {
+                println!(
+                    "Group \"{group_name}\" does not exist at {:?}.",
+                    dotfiles_folder.join(&group_name)
+                );
+                return Ok(());
+            }
+            discard(home_dir, &dotfiles_folder.join(&group_name), &files)
+                .with_context(|| format!("Failed to discard files for group \"{group_name}\""))?;
         }
     }
 
