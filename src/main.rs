@@ -4,7 +4,7 @@ use anyhow::Context;
 use clap::Parser;
 use dotin::{
     commands::{import, link, unlink},
-    utils::{get_home_dir, read_all_groups},
+    utils::get_home_dir,
 };
 
 #[derive(Parser, Debug)]
@@ -17,12 +17,7 @@ enum Command {
         files: Vec<PathBuf>,
     },
     /// Link dotfiles groups into their target position
-    Link {
-        groups: Vec<String>,
-        /// Link all groups in the dotfiles folder
-        #[clap(long)]
-        all: bool,
-    },
+    Link { groups: Vec<String> },
     /// Removes links created by the `link` command
     Unlink { groups: Vec<String> },
 }
@@ -50,18 +45,12 @@ fn run() -> anyhow::Result<()> {
                     .with_context(|| format!("Failed to unlink group \"{group}\""))?;
             }
         }
-        Command::Link { groups, all } => {
-            let groups_to_link = if all {
-                read_all_groups(&dotfiles_folder)?
-            } else {
-                groups
-            };
-
-            if groups_to_link.is_empty() {
+        Command::Link { groups } => {
+            if groups.is_empty() {
                 println!("No group list provided.");
             }
 
-            for group in &groups_to_link {
+            for group in &groups {
                 let dotfiles_group_folder = &dotfiles_folder.join(group);
 
                 link(home_dir, dotfiles_group_folder, group)

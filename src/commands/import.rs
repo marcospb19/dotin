@@ -88,6 +88,7 @@ pub fn import(home_dir: &Path, group_dir: &Path, files: &[PathBuf]) -> anyhow::R
 
     let mut intermediate_directories_to_create = vec![];
 
+    // Check if files at destination already exist
     for FileToMove { to_path, .. } in &files_to_move {
         let parent_directory = to_path.parent().unwrap();
 
