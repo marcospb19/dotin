@@ -7,13 +7,7 @@ use anyhow::{bail, Context};
 use file_type_enum::FileType;
 use fs_err as fs;
 
-use crate::utils;
-
-#[derive(Debug)]
-struct FileToMove<'a> {
-    path: &'a Path,
-    to_path: PathBuf,
-}
+use crate::utils::{self, FileToMove};
 
 pub fn import(home_dir: &Path, group_dir: &Path, files: &[PathBuf]) -> anyhow::Result<()> {
     assert!(
@@ -204,7 +198,7 @@ mod tests {
 
         let dotfiles = tree! {
             dotfiles: {
-                dotfiles_untouched_file
+                stays_5
                 group_name: {
                     partial_move_2_merging_dir: {
                         moved_with_folder_4
@@ -215,7 +209,7 @@ mod tests {
 
         let expected_dotfiles = tree! {
             dotfiles: {
-                dotfiles_untouched_file
+                stays_5
                 group_name: {
                     move_1_full_dir: {
                         moved_with_folder_1

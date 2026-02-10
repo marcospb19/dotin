@@ -98,13 +98,15 @@ pub mod test_utils {
     /// Create a test directory and cd into it
     pub fn cd_to_testdir() -> io::Result<(MutexTempDirHolder, &'static Path)> {
         let guard = loop {
-            if let Ok(guard) = MUTEX.lock() {
-                break guard;
-            } else {
-                MUTEX.clear_poison();
-                continue;
+            match MUTEX.lock() {
+                Ok(guard) => break guard,
+                Err(_) => {
+                    MUTEX.clear_poison();
+                    continue;
+                }
             }
         };
+
         let tempdir = tempfile::tempdir()?;
         let path = tempdir.path().to_path_buf().into_boxed_path();
         env::set_current_dir(&path)?;
@@ -116,4 +118,10 @@ pub mod test_utils {
 
         Ok((holder, Box::leak(path)))
     }
+}
+
+#[derive(Debug)]
+pub struct FileToMove<'a> {
+    pub path: &'a Path,
+    pub to_path: PathBuf,
 }
