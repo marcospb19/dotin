@@ -5,15 +5,15 @@ edition = "2021"
 description = "A simple dotfiles manager inspired by `stow`."
 
 [dependencies]
-anyhow = "1.0.75"
+anyhow = "1.0.100"
 clap = { version = "4.4.4", features = ["derive"] }
 file_type_enum = "2.0.1"
-fs-err = { version = "3.0.0" }
+fs-err = "3.2.2"
 fs-tree = { version = "0.6.0", features = ["fs-err"] }
 
 [dev-dependencies]
-pretty_assertions = "1.4.0"
-tempfile = "3.8.0"
+pretty_assertions = "1.4.1"
+tempfile = "3.24.0"
 
 [profile.release]
 strip = true
