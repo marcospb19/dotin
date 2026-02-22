@@ -163,72 +163,72 @@ mod tests {
 
         let home = tree! {
             stays_1
-            move_1_full_dir: {
+            move_1_full_dir: [
                 moved_with_folder_1
-            }
-            partial_move_7_new_dir: {
+            ]
+            partial_move_7_new_dir: [
                 move_4
-                partial_move_8_new_dir: {
+                partial_move_8_new_dir: [
                     stays_2
                     move_6
-                    move_5_full_dir: {
+                    move_5_full_dir: [
                         moved_with_folder_5
-                    }
-                }
+                    ]
+                ]
                 stays_3
-            }
-            partial_move_2_merging_dir: {
+            ]
+            partial_move_2_merging_dir: [
                 stays_4
                 move_3
-            }
+            ]
         };
 
         let expected_home = tree! {
             stays_1
-            partial_move_7_new_dir: {
-                partial_move_8_new_dir: {
+            partial_move_7_new_dir: [
+                partial_move_8_new_dir: [
                     stays_2
-                }
+                ]
                 stays_3
-            }
-            partial_move_2_merging_dir: {
+            ]
+            partial_move_2_merging_dir: [
                 stays_4
-            }
+            ]
         };
 
         let dotfiles = tree! {
-            dotfiles: {
+            dotfiles: [
                 stays_5
-                group_name: {
-                    partial_move_2_merging_dir: {
+                group_name: [
+                    partial_move_2_merging_dir: [
                         moved_with_folder_4
-                    }
-                }
-            }
+                    ]
+                ]
+            ]
         };
 
         let expected_dotfiles = tree! {
-            dotfiles: {
+            dotfiles: [
                 stays_5
-                group_name: {
-                    move_1_full_dir: {
+                group_name: [
+                    move_1_full_dir: [
                         moved_with_folder_1
-                    }
-                    partial_move_7_new_dir: {
+                    ]
+                    partial_move_7_new_dir: [
                         move_4
-                        partial_move_8_new_dir: {
+                        partial_move_8_new_dir: [
                             move_6
-                            move_5_full_dir: {
+                            move_5_full_dir: [
                                 moved_with_folder_5
-                            }
-                        }
-                    }
-                    partial_move_2_merging_dir: {
+                            ]
+                        ]
+                    ]
+                    partial_move_2_merging_dir: [
                         moved_with_folder_4
                         move_3
-                    }
-                }
-            }
+                    ]
+                ]
+            ]
         };
 
         home.write_at(".").unwrap();

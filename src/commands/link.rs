@@ -81,28 +81,28 @@ mod tests {
         let (_dropper, test_dir) = cd_to_testdir().unwrap();
 
         let home = tree! {
-            ".config": {
-            }
+            ".config": [
+            ]
         };
 
         let dotfiles = tree! {
-            dotfiles: {
-                i3: {
-                    ".config": {
-                        i3: {
+            dotfiles: [
+                i3: [
+                    ".config": [
+                        i3: [
                             config
-                        }
-                    }
-                }
-            }
+                        ]
+                    ]
+                ]
+            ]
         };
 
         let expected_home = tree! {
-            ".config": {
-                i3: {
+            ".config": [
+                i3: [
                     config -> "../../dotfiles/i3/.config/i3/config"
-                }
-            }
+                ]
+            ]
         };
 
         home.write_at(".").unwrap();
