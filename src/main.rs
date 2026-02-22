@@ -3,8 +3,8 @@ use std::path::PathBuf;
 use anyhow::Context;
 use clap::Parser;
 use dotin::{
-    commands::{import, link, unlink},
-    utils::get_home_dir,
+    commands::{discard, import, link, unlink},
+    utils::{get_home_dir, try_exists},
 };
 
 #[derive(Parser, Debug)]
@@ -12,6 +12,12 @@ use dotin::{
 enum Command {
     /// Moves files into the dotfiles group folder, doesn't link them
     Import {
+        group_name: String,
+        #[clap(required = true)]
+        files: Vec<PathBuf>,
+    },
+    /// Moves files from the dotfiles group folder back to their original location (reverse operation of `dotin import`)
+    Discard {
         group_name: String,
         #[clap(required = true)]
         files: Vec<PathBuf>,
@@ -35,13 +41,12 @@ fn run() -> anyhow::Result<()> {
     match Command::parse() {
         Command::Unlink { groups } => {
             if groups.is_empty() {
-                println!("No group list provided.");
+                println!("list of groups to unlink is empty.");
+                return Ok(());
             }
 
             for group in &groups {
-                let dotfiles_group_folder = &dotfiles_folder.join(group);
-
-                unlink(home_dir, dotfiles_group_folder, group)
+                unlink(home_dir, &dotfiles_folder.join(group), group)
                     .with_context(|| format!("Failed to unlink group \"{group}\""))?;
             }
         }
@@ -58,10 +63,21 @@ fn run() -> anyhow::Result<()> {
             }
         }
         Command::Import { group_name, files } => {
-            let dotfiles_group_folder = &dotfiles_folder.join(&group_name);
-
-            import(home_dir, dotfiles_group_folder, &files)
+            assert!(!files.is_empty(), "ensured by CLI definitions");
+            import(home_dir, &dotfiles_folder.join(&group_name), &files)
                 .with_context(|| format!("Failed to import files for group \"{group_name}\""))?;
+        }
+        Command::Discard { group_name, files } => {
+            assert!(!files.is_empty(), "ensured by CLI definitions");
+            if !try_exists(dotfiles_folder.join(&group_name))? {
+                println!(
+                    "Group \"{group_name}\" does not exist at {:?}.",
+                    dotfiles_folder.join(&group_name)
+                );
+                return Ok(());
+            }
+            discard(home_dir, &dotfiles_folder.join(&group_name), &files)
+                .with_context(|| format!("Failed to discard files for group \"{group_name}\""))?;
         }
     }
 

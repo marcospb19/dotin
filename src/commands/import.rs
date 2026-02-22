@@ -27,6 +27,8 @@ pub fn import(
         let mut files_to_move: Vec<FileToMove> = vec![];
 
         for (absolute_path, path) in absolute_paths.iter().zip(files) {
+            // TODO: this read might fail
+            // TODO: there are additional file types, replace with helper util function to report those
             let is_file_symlink =
                 FileType::symlink_read_at(path).is_ok_and(|file_type| file_type.is_symlink());
 

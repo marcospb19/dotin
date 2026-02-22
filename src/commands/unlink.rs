@@ -4,7 +4,7 @@ use anyhow::Context;
 use fs_err as fs;
 use fs_tree::FsTree;
 
-use crate::utils::symlink_target_path;
+use crate::utils::create_relative_symlink_target_path;
 
 pub fn unlink(home_dir: &Path, group_dir: &Path, group_name: &str) -> anyhow::Result<()> {
     let group_tree = FsTree::symlink_read_at(group_dir).context("reading dotfiles folder tree")?;
@@ -19,7 +19,7 @@ pub fn unlink(home_dir: &Path, group_dir: &Path, group_name: &str) -> anyhow::Re
         };
 
         let home_absolute = home_dir.join(&relative_path);
-        let symlink_target = symlink_target_path(&relative_path, group_name);
+        let symlink_target = create_relative_symlink_target_path(&relative_path, group_name);
 
         // unlink if the link points to the expected target
         if symlink_target == current_target {

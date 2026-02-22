@@ -33,8 +33,8 @@ pub fn create_symlink(link_location: &Path, original: &Path) -> anyhow::Result<(
     })
 }
 
-/// Creates the path for a symlink at `the/relative/path` to `../../dotfiles/GROUP/the/relative/path`
-pub fn symlink_target_path(relative_path: &Path, group_name: &str) -> PathBuf {
+/// Creates the target for a symlink at `the/relative/path` as `../../dotfiles/GROUP/the/relative/path`
+pub fn create_relative_symlink_target_path(relative_path: &Path, group_name: &str) -> PathBuf {
     let nestedness = relative_path.components().count().saturating_sub(1);
     let path_out_of_nesting = repeat_n(Path::new("../"), nestedness).collect::<PathBuf>();
     path_out_of_nesting

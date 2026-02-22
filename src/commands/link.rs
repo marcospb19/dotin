@@ -4,7 +4,7 @@ use anyhow::Context;
 use fs_err as fs;
 use fs_tree::FsTree;
 
-use crate::utils::{self, symlink_target_path};
+use crate::utils::{self, create_relative_symlink_target_path};
 
 pub fn link(home_dir: &Path, group_dir: &Path, group_name: &str) -> anyhow::Result<()> {
     let group_tree = FsTree::symlink_read_at(group_dir).context("reading dotfiles folder tree")?;
@@ -25,7 +25,7 @@ pub fn link(home_dir: &Path, group_dir: &Path, group_name: &str) -> anyhow::Resu
         }
 
         let home_absolute = home_dir.join(&relative_path);
-        let symlink_target = symlink_target_path(&relative_path, group_name);
+        let symlink_target = create_relative_symlink_target_path(&relative_path, group_name);
 
         // if already exists at home
         if let Some(home_node) = home_tree.get(&relative_path) {
