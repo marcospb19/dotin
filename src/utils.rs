@@ -1,19 +1,29 @@
 use std::{
     env, io,
     iter::repeat_n,
-    os::unix::fs::{symlink, MetadataExt},
+    os::unix::fs::{MetadataExt, symlink},
     path::{Path, PathBuf},
 };
 
-use anyhow::{bail, Context};
+use anyhow::{Context, bail};
 use file_type_enum::FileType;
-use fs_err as fs;
+use fs_err::{self as fs, PathExt};
 
 pub fn get_home_dir() -> anyhow::Result<PathBuf> {
     let home_env_var =
         env::var_os("HOME").context("Failed to read user's home directory, try setting $HOME")?;
 
     fs::canonicalize(&*home_env_var).context("Failed to read path at $HOME")
+}
+
+/// Reimplement `try_exists` so it works when `path` points to a symlink and
+/// the symlink is broken.
+pub fn try_exists(path: impl AsRef<Path>) -> io::Result<bool> {
+    match fs::symlink_metadata(path) {
+        Ok(_) => Ok(true),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(false),
+        Err(error) => Err(error),
+    }
 }
 
 /// Creates a symlink at `link_location` that points to `original`.
@@ -50,29 +60,80 @@ pub fn create_folder_at(folder_path: &Path) -> anyhow::Result<()> {
     .context("creating folder")
 }
 
-pub fn dedup_nested(paths: &mut Vec<&Path>) {
-    let is_contained_in_another_path = |needle: &Path| {
-        paths
-            .iter()
-            .filter(|&&haystack| haystack != needle)
-            .any(|haystack| needle.strip_prefix(haystack).is_ok())
+pub fn cheap_move_with_fallback(from: &Path, to: &Path) -> anyhow::Result<()> {
+    if let Some(to_parent) = to.parent()
+        && !try_exists(to_parent)?
+    {
+        fs::create_dir_all(to_parent)?;
+    }
+
+    if let Err(err) = fs::rename(from, to) {
+        // if renaming (cheapest move) is impossible, try fallback
+        if err.kind() == io::ErrorKind::CrossesDevices {
+            if FileType::symlink_read_at(from)?.is_directory() {
+                // dir fallback
+                expensive_folder_copy(from.to_owned(), to.to_owned())?;
+            } else {
+                // non-dir fallback
+                fs::copy(from, to).context("while trying to move file")?;
+                fs::remove_file(from).context("removing file after copy (mv operation)")?;
+            }
+        } else {
+            return Err(err.into());
+        }
+    }
+    Ok(())
+}
+
+fn expensive_folder_copy(from: PathBuf, to: PathBuf) -> anyhow::Result<()> {
+    // Use a stack to avoid too-many-files error (this can't ever stack
+    // overflow due to Linux's path size limit)
+    let mut stack = Vec::new();
+    stack.push((from, to));
+
+    while let Some((from, to)) = stack.pop() {
+        if from.fs_err_metadata()?.is_dir() {
+            fs::create_dir_all(&to)?;
+            for entry in fs::read_dir(from)? {
+                let entry = entry?;
+                let path = entry.path();
+                // Unwrap Safety:
+                //   A path retrieved by readdir always has a file_name
+                let name = path.file_name().unwrap();
+                let dest = to.join(name);
+                stack.push((path, dest));
+            }
+        } else {
+            fs::copy(from, to)?;
+        }
+    }
+
+    Ok(())
+}
+
+/// Expensive O(n²) de-duplication to minimize fs::create_dir_all calls.
+pub fn dedup_directories(paths: &mut Vec<&Path>) {
+    let is_parent_of_another_path = |needle: &Path, needle_index: usize| {
+        paths.iter().enumerate().any(|(haystack_index, haystack)| {
+            needle.strip_prefix(haystack).is_ok() && haystack_index != needle_index
+        })
     };
 
     let items_to_be_removed: Vec<usize> = paths
         .iter()
-        .rev()
         .enumerate()
-        .filter(|(_index, path)| is_contained_in_another_path(path))
+        .filter(|&(index, path)| is_parent_of_another_path(path, index))
         .map(|(index, _path)| index)
         .collect();
 
-    for index in items_to_be_removed {
+    for index in items_to_be_removed.into_iter().rev() {
         paths.remove(index);
     }
 }
 
+#[expect(unused)]
 /// Check if files at the two paths are in the same filesystem.
-pub fn are_in_the_same_filesystem(a: &Path, b: &Path) -> io::Result<bool> {
+fn are_in_the_same_filesystem(a: &Path, b: &Path) -> io::Result<bool> {
     let a = fs::metadata(a)?.dev();
     let b = fs::metadata(b)?.dev();
     Ok(a == b)

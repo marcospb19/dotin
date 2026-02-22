@@ -7,13 +7,15 @@ description = "A simple dotfiles manager inspired by `stow`."
 [dependencies]
 anyhow = "1.0.100"
 clap = { version = "4.4.4", features = ["derive"] }
-file_type_enum = "2.0.1"
+file_type_enum = "3.0.1"
 fs-err = "3.2.2"
 fs-tree = { version = "0.7.0", features = ["fs-err"] }
 
 [dev-dependencies]
+assert_cmd = "2.1.2"
 pretty_assertions = "1.4.1"
 tempfile = "3.24.0"
+fs-err = { version = "3.2.2", features = ["debug"] }
 
 [profile.release]
 strip = true

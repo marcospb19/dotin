@@ -3,19 +3,18 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use anyhow::{bail, Context};
+use anyhow::{Context, bail};
 use file_type_enum::FileType;
-use fs_err as fs;
+use fs_err::{self as fs};
 
-use crate::utils::{self, FileToMove};
+use crate::utils::{self, FileToMove, cheap_move_with_fallback, try_exists};
 
-pub fn import(home_dir: &Path, group_dir: &Path, files: &[PathBuf]) -> anyhow::Result<()> {
-    assert!(
-        !files.is_empty(),
-        "`dotin import` file list cannot be empty, this should be ensured by `cli` definitions",
-    );
-
-    let dotfiles_folder = group_dir
+pub fn import(
+    home_path: &Path,
+    absolute_group_path: &Path,
+    files: &[PathBuf],
+) -> anyhow::Result<()> {
+    let dotfiles_folder = absolute_group_path
         .parent()
         .expect("Internal error, malformed dotfiles folder");
 
@@ -46,18 +45,20 @@ pub fn import(home_dir: &Path, group_dir: &Path, files: &[PathBuf]) -> anyhow::R
 
             // If the file is itself a symlink.
             if is_file_symlink {
-                println!("ERROR: the file you're trying to move {path:?} is a symlink itself, I'm not quite sure if you really meant to move it to the group folder, please handle it manually");
+                println!(
+                    "ERROR: the file you're trying to move {path:?} is a symlink itself, I'm not quite sure if you really meant to move it to the group folder, please handle it manually"
+                );
             }
 
-            // Is file inside of `home_dir`? If not, throw error.
-            if let Ok(normalized_path) = absolute_path.strip_prefix(home_dir) {
-                let to_path = group_dir.join(normalized_path);
+            // Is file inside of `home_path`? If not, throw error.
+            if let Ok(normalized_path) = absolute_path.strip_prefix(home_path) {
+                let to_path = absolute_group_path.join(normalized_path);
 
                 let file = FileToMove { path, to_path };
                 files_to_move.push(file);
             } else {
                 bail!(
-                    "`dotin` can only import files inside of home directory {home_dir:?}, \
+                    "`dotin` can only import files inside of home directory {home_path:?}, \
                      but {path:?} seems to be outside of it."
                 );
             }
@@ -70,33 +71,32 @@ pub fn import(home_dir: &Path, group_dir: &Path, files: &[PathBuf]) -> anyhow::R
         println!("No files to move.");
     }
 
-    utils::create_folder_at(group_dir).context("create folder for group")?;
+    utils::create_folder_at(absolute_group_path).context("create folder for group")?;
 
     for FileToMove { to_path, .. } in &files_to_move {
-        // Check if files at destination already exist
         // TODO: this isn't considering symlinks
-        if to_path.exists() {
-            panic!("File at {to_path:?} already exists, and cannot be imported");
+        // TODO: what if these two files match, is it a conflict?
+        if try_exists(to_path)? {
+            panic!("File at {to_path:?} already exists, can't import this");
         }
     }
 
     let mut intermediate_directories_to_create = vec![];
 
-    // Check if files at destination already exist
     for FileToMove { to_path, .. } in &files_to_move {
         let parent_directory = to_path.parent().unwrap();
 
-        if parent_directory.exists() {
+        if try_exists(parent_directory)? {
             if !parent_directory.is_dir() {
                 panic!("Cannot create file at {parent_directory:?}, there's a file there.");
             }
-        } else if parent_directory != group_dir {
+        } else if parent_directory != absolute_group_path {
             intermediate_directories_to_create.push(parent_directory);
         }
     }
 
     if !intermediate_directories_to_create.is_empty() {
-        utils::dedup_nested(&mut intermediate_directories_to_create);
+        utils::dedup_directories(&mut intermediate_directories_to_create);
         intermediate_directories_to_create.sort();
 
         println!(
@@ -112,31 +112,17 @@ pub fn import(home_dir: &Path, group_dir: &Path, files: &[PathBuf]) -> anyhow::R
         println!();
     }
 
-    // Check if files at destination already exist
-    for FileToMove { path, to_path } in &files_to_move {
-        let parent_directory = to_path.parent().unwrap();
-
-        // Check if file cannot be moved
-        if !utils::are_in_the_same_filesystem(path, parent_directory)? {
-            bail!(
-                "Cannot move file {path:?} to folder {parent_directory:?} because they're \
-                not in the same filesystem"
-            );
-        }
-    }
-
     println!(
         "Will move {} files: {files_to_move:#?}",
         files_to_move.len(),
     );
 
-    // Check if files at destination already exist
+    // Finally move them
     for FileToMove { path, to_path } in &files_to_move {
-        fs::rename(path, to_path).context("Failed to move file")?;
+        cheap_move_with_fallback(path, to_path).context("Failed to move file to import")?;
     }
 
     println!("Done.");
-
     Ok(())
 }
 
