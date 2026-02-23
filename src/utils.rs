@@ -1,5 +1,7 @@
 use std::{
-    env, io,
+    env,
+    ffi::{OsStr, OsString},
+    io,
     iter::repeat_n,
     os::unix::fs::{MetadataExt, symlink},
     path::{Path, PathBuf},
@@ -7,6 +9,7 @@ use std::{
 
 use anyhow::{Context, bail};
 use fs_err::{self as fs, PathExt};
+use indexmap::IndexMap;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FileType {
@@ -135,24 +138,90 @@ fn expensive_folder_copy(from: PathBuf, to: PathBuf) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Expensive O(n²) de-duplication to minimize fs::create_dir_all calls.
-pub fn dedup_directories(paths: &mut Vec<&Path>) {
-    let is_parent_of_another_path = |needle: &Path, needle_index: usize| {
-        paths.iter().enumerate().any(|(haystack_index, haystack)| {
-            needle.strip_prefix(haystack).is_ok() && haystack_index != needle_index
-        })
-    };
+type PathTrieMap = IndexMap<OsString, PathTrie, rapidhash::fast::RandomState>;
 
-    let items_to_be_removed: Vec<usize> = paths
-        .iter()
-        .enumerate()
-        .filter(|&(index, path)| is_parent_of_another_path(path, index))
-        .map(|(index, _path)| index)
-        .collect();
+#[derive(Default)]
+pub struct PathTrie {
+    is_path: bool,
+    children: PathTrieMap,
+}
 
-    for index in items_to_be_removed.into_iter().rev() {
-        paths.remove(index);
+impl PathTrie {
+    pub fn new() -> Self {
+        Self::default()
     }
+
+    pub fn contains_ancestor_of(&self, path: &Path) -> bool {
+        let (first, rest) = path_split_first(path);
+
+        if rest.as_os_str().is_empty() {
+            return false;
+        }
+
+        let Some(first) = first else {
+            return false;
+        };
+
+        let Some(node) = self.children.get(first) else {
+            return false;
+        };
+
+        if node.is_path {
+            return true;
+        }
+
+        node.contains_ancestor_of(rest)
+    }
+
+    /// Inserts a path into this Trie.
+    ///
+    /// # Panics:
+    ///
+    /// - Panics if `path` isn't absolute.
+    pub fn insert(&mut self, path: &Path) {
+        debug_assert!(path.is_absolute(), "PathTrie only accepts absolute paths");
+        self.insert_recursive(path)
+    }
+
+    fn insert_recursive(&mut self, path: &Path) {
+        let path = path.to_owned();
+        let (first, rest) = path_split_first(&path);
+
+        if let Some(first) = first {
+            let node = self.children.entry(first.to_owned()).or_default();
+
+            if rest.iter().next().is_none() {
+                node.is_path = true;
+            }
+            node.insert_recursive(rest)
+        }
+    }
+}
+
+impl<Item> FromIterator<Item> for PathTrie
+where
+    Item: AsRef<Path>,
+{
+    fn from_iter<T: IntoIterator<Item = Item>>(iter: T) -> Self {
+        let mut trie = PathTrie::new();
+        for path in iter {
+            trie.insert(path.as_ref());
+        }
+        trie
+    }
+}
+
+pub fn deduplicate_paths_inside_others(paths: &mut Vec<&Path>) {
+    let mut trie = PathTrie::new();
+    for path in paths.iter() {
+        trie.insert(path);
+    }
+    paths.retain(|path| !trie.contains_ancestor_of(path));
+}
+
+fn path_split_first(path: &Path) -> (Option<&OsStr>, &Path) {
+    let mut iter = path.iter();
+    (iter.next(), iter.as_path())
 }
 
 #[expect(unused)]
@@ -208,4 +277,37 @@ pub mod test_utils {
 pub struct FileToMove<'a> {
     pub path: &'a Path,
     pub to_path: PathBuf,
+}
+
+#[cfg(test)]
+mod path_trie_tests {
+    use std::path::Path;
+
+    use super::PathTrie;
+
+    #[test]
+    fn test_path_trie_contains_ancestor_of() {
+        let trie = PathTrie::from_iter(["/home/user"]);
+        assert!(trie.contains_ancestor_of(Path::new("/home/user/docs")));
+        assert!(trie.contains_ancestor_of(Path::new("/home/user/docs/file.txt")));
+
+        let trie = PathTrie::from_iter(["/home/user"]);
+        assert!(!trie.contains_ancestor_of(Path::new("/home/user")));
+
+        let trie = PathTrie::from_iter(["/home/user/docs"]);
+        assert!(!trie.contains_ancestor_of(Path::new("/home/user")));
+        assert!(!trie.contains_ancestor_of(Path::new("/home")));
+
+        let trie = PathTrie::from_iter(["/home/user"]);
+        assert!(!trie.contains_ancestor_of(Path::new("/var/log")));
+        assert!(!trie.contains_ancestor_of(Path::new("/home/other")));
+
+        let trie = PathTrie::from_iter(["/home/user", "/var/log"]);
+        assert!(trie.contains_ancestor_of(Path::new("/home/user/docs")));
+        assert!(trie.contains_ancestor_of(Path::new("/var/log/syslog")));
+        assert!(!trie.contains_ancestor_of(Path::new("/etc/config")));
+
+        let trie = PathTrie::new();
+        assert!(!trie.contains_ancestor_of(Path::new("/home/user")));
+    }
 }

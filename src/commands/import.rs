@@ -96,7 +96,7 @@ pub fn import(
     }
 
     if !intermediate_directories_to_create.is_empty() {
-        utils::dedup_directories(&mut intermediate_directories_to_create);
+        utils::deduplicate_paths_inside_others(&mut intermediate_directories_to_create);
         intermediate_directories_to_create.sort();
 
         println!(
