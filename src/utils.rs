@@ -287,27 +287,20 @@ mod path_trie_tests {
 
     #[test]
     fn test_path_trie_contains_ancestor_of() {
-        let trie = PathTrie::from_iter(["/home/user"]);
-        assert!(trie.contains_ancestor_of(Path::new("/home/user/docs")));
-        assert!(trie.contains_ancestor_of(Path::new("/home/user/docs/file.txt")));
-
-        let trie = PathTrie::from_iter(["/home/user"]);
-        assert!(!trie.contains_ancestor_of(Path::new("/home/user")));
-
-        let trie = PathTrie::from_iter(["/home/user/docs"]);
-        assert!(!trie.contains_ancestor_of(Path::new("/home/user")));
-        assert!(!trie.contains_ancestor_of(Path::new("/home")));
-
-        let trie = PathTrie::from_iter(["/home/user"]);
+        let trie: PathTrie = ["/home/user"].iter().collect();
+        assert!(trie.contains_ancestor_of(Path::new("/home/user/a")));
+        assert!(trie.contains_ancestor_of(Path::new("/home/user/a/b/c")));
+        assert!(!trie.contains_ancestor_of(Path::new("/unrelated")));
         assert!(!trie.contains_ancestor_of(Path::new("/var/log")));
         assert!(!trie.contains_ancestor_of(Path::new("/home/other")));
+        assert!(!trie.contains_ancestor_of(Path::new("/home/user")));
+        assert!(!trie.contains_ancestor_of(Path::new("/home")));
+        assert!(!trie.contains_ancestor_of(Path::new("/")));
 
-        let trie = PathTrie::from_iter(["/home/user", "/var/log"]);
+        let trie: PathTrie = ["/home/user", "/var/log"].iter().collect();
         assert!(trie.contains_ancestor_of(Path::new("/home/user/docs")));
         assert!(trie.contains_ancestor_of(Path::new("/var/log/syslog")));
         assert!(!trie.contains_ancestor_of(Path::new("/etc/config")));
-
-        let trie = PathTrie::new();
-        assert!(!trie.contains_ancestor_of(Path::new("/home/user")));
+        assert!(!trie.contains_ancestor_of(Path::new("/var")));
     }
 }

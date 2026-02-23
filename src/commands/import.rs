@@ -97,19 +97,15 @@ pub fn import(
 
     if !intermediate_directories_to_create.is_empty() {
         utils::deduplicate_paths_inside_others(&mut intermediate_directories_to_create);
-        intermediate_directories_to_create.sort();
 
         println!(
-            "Will create {} intermediate directories: {intermediate_directories_to_create:#?}",
+            "Creating {} intermediate directories: {intermediate_directories_to_create:#?}",
             intermediate_directories_to_create.len(),
         );
 
         for dir in &intermediate_directories_to_create {
             fs::create_dir_all(dir).context("Failed to create intermediate directory")?;
         }
-
-        println!("Done.");
-        println!();
     }
 
     println!(
@@ -122,7 +118,6 @@ pub fn import(
         cheap_move_with_fallback(path, to_path).context("Failed to move file to import")?;
     }
 
-    println!("Done.");
     Ok(())
 }
 

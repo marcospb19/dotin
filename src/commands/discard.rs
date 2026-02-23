@@ -3,8 +3,9 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, anyhow};
 use fs_err::{self as fs};
 
-use crate::utils::{FileType, cheap_move_with_fallback, read_file_type, try_exists};
+use crate::utils::{FileType, PathTrie, cheap_move_with_fallback, read_file_type, try_exists};
 
+#[derive(Debug)]
 struct FileToDiscard {
     /// TODO: set to None when you got a file traversing folders recursively.
     user_given_path: Option<PathBuf>,
@@ -22,6 +23,7 @@ impl FileToDiscard {
     }
 }
 
+#[derive(Clone, Copy, Debug)]
 enum ConflictResolution {
     None,
     DeleteDir,
@@ -72,9 +74,6 @@ fn prepare_discard_and_run_checks(
         };
 
     let equivalent_home_path = home_dir.join(&relative_path_piece);
-
-    dbg!((&absolute_dotfile_path, &relative_path_piece));
-    dbg!(&equivalent_home_path);
 
     let conflict_resolution = 'conflict_check: {
         // If file already exists at home, check if it's a scenario of conflict error
@@ -137,24 +136,36 @@ pub fn discard(
     absolute_group_path: &Path,
     paths: &[PathBuf],
 ) -> anyhow::Result<()> {
-    let files_to_discard = paths
-        .iter()
-        .map(|path| prepare_discard_and_run_checks(path, home_dir, absolute_group_path))
-        .collect::<anyhow::Result<Vec<FileToDiscard>>>()?;
+    let files_to_discard = {
+        let mut files: Vec<FileToDiscard> = paths
+            .iter()
+            .map(|path| prepare_discard_and_run_checks(path, home_dir, absolute_group_path))
+            .collect::<anyhow::Result<_>>()?;
 
-    if files_to_discard.is_empty() {
-        println!("No files to discard.");
-    }
+        if files.is_empty() {
+            println!("No files to discard.");
+            return Ok(());
+        }
 
-    if let files_to_discard_list = files_to_discard
+        // Deduplicate paths inside others
+        let path_trie: PathTrie = files
+            .iter()
+            .map(|file| file.equivalent_home_path.as_path())
+            .collect();
+
+        files.retain(|file| !path_trie.contains_ancestor_of(&file.equivalent_home_path));
+        files
+    };
+
+    if let display_files_to_discard = files_to_discard
         .iter()
         .map(|file| file.display_path())
         .collect::<Vec<_>>()
     {
         println!(
             "Will discard {} files: {:#?}",
-            files_to_discard_list.len(),
-            files_to_discard_list,
+            display_files_to_discard.len(),
+            display_files_to_discard,
         );
     }
 
@@ -175,7 +186,6 @@ pub fn discard(
             .with_context(|| format!("while discarding {:?}", file.display_path()))?;
     }
 
-    println!("Done.");
     Ok(())
 }
 

@@ -81,5 +81,6 @@ fn run() -> anyhow::Result<()> {
         }
     }
 
+    println!("Done.");
     Ok(())
 }
