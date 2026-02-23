@@ -7,20 +7,13 @@ use crate::utils::{FileType, PathTrie, cheap_move_with_fallback, read_file_type,
 
 #[derive(Debug)]
 struct FileToDiscard {
-    /// TODO: set to None when you got a file traversing folders recursively.
-    user_given_path: Option<PathBuf>,
+    user_given_path: PathBuf,
     absolute_dotfile_path: PathBuf,
     equivalent_home_path: PathBuf,
+    /// TODO: should we output this instead of `user_given_path`?
+    #[expect(unused)]
     relative_path_piece: PathBuf,
     conflict_resolution: ConflictResolution,
-}
-
-impl FileToDiscard {
-    fn display_path(&self) -> &PathBuf {
-        self.user_given_path
-            .as_ref()
-            .unwrap_or(&self.relative_path_piece)
-    }
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -54,7 +47,7 @@ fn prepare_discard_and_run_checks(
                 // File found at home, user pointed directly to that, check if it exists in the dotfiles folder
                 let joined = absolute_group_path.join(stripped);
                 if !try_exists(&joined)? {
-                    return Err(anyhow!("couldn't find file at {:?} to discard", joined));
+                    return Err(anyhow!("couldn't find file at {joined:?} to discard"));
                 }
 
                 (stripped.to_owned(), joined)
@@ -123,7 +116,7 @@ fn prepare_discard_and_run_checks(
     };
 
     Ok(FileToDiscard {
-        user_given_path: Some(path.to_owned()),
+        user_given_path: path.to_owned(),
         absolute_dotfile_path,
         relative_path_piece,
         equivalent_home_path,
@@ -159,7 +152,7 @@ pub fn discard(
 
     if let display_files_to_discard = files_to_discard
         .iter()
-        .map(|file| file.display_path())
+        .map(|file| &file.user_given_path)
         .collect::<Vec<_>>()
     {
         println!(
@@ -183,7 +176,7 @@ pub fn discard(
         }
 
         cheap_move_with_fallback(&file.absolute_dotfile_path, &file.equivalent_home_path)
-            .with_context(|| format!("while discarding {:?}", file.display_path()))?;
+            .with_context(|| format!("while discarding {:?}", file.user_given_path))?;
     }
 
     Ok(())
@@ -217,7 +210,7 @@ pub mod tests {
         let error = discard(
             test_dir,
             &test_dir.join("dotfiles/example_group"),
-            &[PathBuf::from("discarded_path")],
+            ["discarded_path"].map(PathBuf::from).as_slice(),
         )
         .unwrap_err();
 
@@ -255,7 +248,7 @@ pub mod tests {
         discard(
             test_dir,
             &test_dir.join("dotfiles/example_group"),
-            &[PathBuf::from("discarded_path")],
+            ["discarded_path"].map(PathBuf::from).as_slice(),
         )
         .unwrap();
 
@@ -287,7 +280,7 @@ pub mod tests {
         let error = discard(
             test_dir,
             &test_dir.join("dotfiles/example_group"),
-            &[PathBuf::from("discarded_path")],
+            ["discarded_path"].map(PathBuf::from).as_slice(),
         )
         .unwrap_err();
 
@@ -328,7 +321,7 @@ pub mod tests {
         discard(
             test_dir,
             &test_dir.join("dotfiles/example_group"),
-            &[PathBuf::from("discarded_path")],
+            ["discarded_path"].map(PathBuf::from).as_slice(),
         )
         .unwrap();
 
@@ -360,7 +353,7 @@ pub mod tests {
         let error = discard(
             test_dir,
             &test_dir.join("dotfiles/example_group"),
-            &[PathBuf::from("discarded_path")],
+            ["discarded_path"].map(PathBuf::from).as_slice(),
         )
         .unwrap_err();
 
@@ -394,29 +387,6 @@ pub mod tests {
                 stays_4
             ]
         };
-
-        let expected_home = tree! {
-            stays_1
-            move_1_full_dir: [
-                moved_with_folder_1
-            ]
-            partial_move_7_new_dir: [
-                move_4
-                partial_move_8_new_dir: [
-                    stays_2
-                    move_6
-                    move_5_full_dir: [
-                        moved_with_folder_5
-                    ]
-                ]
-                stays_3
-            ]
-            partial_move_2_merging_dir: [
-                stays_4
-                move_3
-            ]
-        };
-
         let dotfiles = tree! {
             dotfiles: [
                 stays_5
@@ -441,6 +411,27 @@ pub mod tests {
             ]
         };
 
+        let expected_home = tree! {
+            stays_1
+            move_1_full_dir: [
+                moved_with_folder_1
+            ]
+            partial_move_7_new_dir: [
+                move_4
+                partial_move_8_new_dir: [
+                    stays_2
+                    move_6
+                    move_5_full_dir: [
+                        moved_with_folder_5
+                    ]
+                ]
+                stays_3
+            ]
+            partial_move_2_merging_dir: [
+                stays_4
+                move_3
+            ]
+        };
         let expected_dotfiles = tree! {
             dotfiles: [
                 stays_5
@@ -459,6 +450,54 @@ pub mod tests {
             test_dir,
             &test_dir.join("dotfiles/group_name"),
             &files_to_discard,
+        )
+        .unwrap();
+
+        let home_result = expected_home.symlink_read_structure_at(".").unwrap();
+        assert_eq!(home_result, expected_home);
+        let dotfiles_result = expected_dotfiles.symlink_read_structure_at(".").unwrap();
+        assert_eq!(dotfiles_result, expected_dotfiles);
+    }
+
+    #[test]
+    fn test_discard_passing_file_and_its_parent() {
+        let (_dropper, test_dir) = cd_to_testdir().unwrap();
+
+        let home = tree! {};
+        let dotfiles = tree! {
+            dotfiles: [
+                group: [
+                    dir: [
+                        parent: [
+                            file
+                        ]
+                    ]
+                ]
+            ]
+        };
+
+        let expected_home = tree! {
+            dir: [
+                parent: [
+                    file
+                ]
+            ]
+        };
+        let expected_dotfiles = tree! {
+            dotfiles: [
+                group: []
+            ]
+        };
+
+        home.write_at(".").unwrap();
+        dotfiles.write_at(".").unwrap();
+
+        discard(
+            test_dir,
+            &test_dir.join("dotfiles/group"),
+            ["dir/parent", "dir/parent/file"]
+                .map(PathBuf::from)
+                .as_slice(),
         )
         .unwrap();
 
