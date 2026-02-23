@@ -6,8 +6,25 @@ use std::{
 };
 
 use anyhow::{Context, bail};
-use file_type_enum::FileType;
 use fs_err::{self as fs, PathExt};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FileType {
+    Regular,
+    Directory,
+    Symlink,
+}
+
+pub fn read_file_type(path: &Path) -> anyhow::Result<FileType> {
+    use file_type_enum::FileType::*;
+
+    match file_type_enum::FileType::symlink_read_at(path)? {
+        Regular => Ok(FileType::Regular),
+        Directory => Ok(FileType::Directory),
+        Symlink => Ok(FileType::Symlink),
+        variant => bail!("path {path:?}, is a {variant}, which isn't supported"),
+    }
+}
 
 pub fn get_home_dir() -> anyhow::Result<PathBuf> {
     let home_env_var =
@@ -44,20 +61,27 @@ pub fn create_relative_symlink_target_path(relative_path: &Path, group_name: &st
 }
 
 pub fn create_folder_at(folder_path: &Path) -> anyhow::Result<()> {
-    let file_type = FileType::symlink_read_at(folder_path);
-
-    match file_type {
-        Ok(FileType::Directory) => Ok(()),
-        Ok(file_type) => {
-            bail!("can't create folder at {folder_path:?}, a {file_type} exists at that path")
+    match fs::symlink_metadata(folder_path) {
+        Ok(_) => {
+            let file_type = read_file_type(folder_path)?;
+            match file_type {
+                FileType::Directory => Ok(()),
+                FileType::Regular => {
+                    bail!(
+                        "can't create folder at {folder_path:?}, a regular file exists at that path"
+                    )
+                }
+                FileType::Symlink => {
+                    bail!("can't create folder at {folder_path:?}, a symlink exists at that path")
+                }
+            }
         }
         Err(err) if err.kind() == io::ErrorKind::NotFound => {
             println!("creating folder at {folder_path:?}");
-            fs::create_dir_all(folder_path)
+            fs::create_dir_all(folder_path).context("creating folder")
         }
-        Err(err) => Err(err),
+        Err(err) => Err(err.into()),
     }
-    .context("creating folder")
 }
 
 pub fn cheap_move_with_fallback(from: &Path, to: &Path) -> anyhow::Result<()> {
@@ -70,7 +94,7 @@ pub fn cheap_move_with_fallback(from: &Path, to: &Path) -> anyhow::Result<()> {
     if let Err(err) = fs::rename(from, to) {
         // if renaming (cheapest move) is impossible, try fallback
         if err.kind() == io::ErrorKind::CrossesDevices {
-            if FileType::symlink_read_at(from)?.is_directory() {
+            if let FileType::Directory = read_file_type(from)? {
                 // dir fallback
                 expensive_folder_copy(from.to_owned(), to.to_owned())?;
             } else {
@@ -148,8 +172,7 @@ pub mod test_utils {
     };
 
     // I know this is despicable, and I don't care
-
-    static MUTEX: Mutex<()> = Mutex::new(());
+    static TEST_LOCK_MUTEX: Mutex<()> = Mutex::new(());
 
     pub struct MutexTempDirHolder {
         _tempdir: tempfile::TempDir,
@@ -159,10 +182,10 @@ pub mod test_utils {
     /// Create a test directory and cd into it
     pub fn cd_to_testdir() -> io::Result<(MutexTempDirHolder, &'static Path)> {
         let guard = loop {
-            match MUTEX.lock() {
+            match TEST_LOCK_MUTEX.lock() {
                 Ok(guard) => break guard,
                 Err(_) => {
-                    MUTEX.clear_poison();
+                    TEST_LOCK_MUTEX.clear_poison();
                     continue;
                 }
             }

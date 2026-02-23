@@ -4,10 +4,11 @@ use std::{
 };
 
 use anyhow::{Context, bail};
-use file_type_enum::FileType;
 use fs_err::{self as fs};
 
-use crate::utils::{self, FileToMove, cheap_move_with_fallback, try_exists};
+use crate::utils::{
+    self, FileToMove, FileType, cheap_move_with_fallback, read_file_type, try_exists,
+};
 
 pub fn import(
     home_path: &Path,
@@ -27,14 +28,11 @@ pub fn import(
         let mut files_to_move: Vec<FileToMove> = vec![];
 
         for (absolute_path, path) in absolute_paths.iter().zip(files) {
-            // TODO: this read might fail
-            // TODO: there are additional file types, replace with helper util function to report those
-            let is_file_symlink =
-                FileType::symlink_read_at(path).is_ok_and(|file_type| file_type.is_symlink());
+            let file_type = read_file_type(path)?;
 
             // Is file inside of `dotfiles_folder`? Skip it.
             if let Ok(normalized_path) = absolute_path.strip_prefix(dotfiles_folder) {
-                if is_file_symlink {
+                if let FileType::Symlink = file_type {
                     println!(
                         "Skipping {path:?}, it's already a symlink, and it points to \
                          {normalized_path:?}, which is inside of the dotfiles directory."
@@ -46,7 +44,7 @@ pub fn import(
             }
 
             // If the file is itself a symlink.
-            if is_file_symlink {
+            if let FileType::Symlink = file_type {
                 println!(
                     "ERROR: the file you're trying to move {path:?} is a symlink itself, I'm not quite sure if you really meant to move it to the group folder, please handle it manually"
                 );

@@ -1,10 +1,9 @@
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, anyhow};
-use file_type_enum::FileType;
 use fs_err::{self as fs};
 
-use crate::utils::{cheap_move_with_fallback, try_exists};
+use crate::utils::{FileType, cheap_move_with_fallback, read_file_type, try_exists};
 
 struct FileToDiscard {
     /// TODO: set to None when you got a file traversing folders recursively.
@@ -80,7 +79,7 @@ fn prepare_discard_and_run_checks(
     let conflict_resolution = 'conflict_check: {
         // If file already exists at home, check if it's a scenario of conflict error
         if try_exists(&equivalent_home_path)? {
-            let file_type = FileType::symlink_read_at(&equivalent_home_path)?;
+            let file_type = read_file_type(&equivalent_home_path)?;
 
             match file_type {
                 FileType::Regular => {
@@ -118,7 +117,6 @@ fn prepare_discard_and_run_checks(
                         "there is a symlink at {equivalent_home_path:?}, but it points to {target:?} and not {absolute_dotfile_path:?}"
                     ));
                 }
-                _ => todo!("handle additional types in an utils wrapper"),
             }
         };
 
