@@ -38,6 +38,8 @@ fn run() -> anyhow::Result<()> {
     let home_dir = &get_home_dir()?;
     let dotfiles_folder = home_dir.join("dotfiles");
 
+    // TODO: err early if given path is empty string
+    // TODO: err early if trying to import or discard `"."`
     match Command::parse() {
         Command::Unlink { groups } => {
             if groups.is_empty() {

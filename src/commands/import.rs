@@ -1,6 +1,6 @@
 use std::{
     io,
-    path::{Path, PathBuf},
+    path::{self, Path, PathBuf},
 };
 
 use anyhow::{Context, bail};
@@ -21,7 +21,7 @@ pub fn import(
 
     let absolute_paths: Vec<PathBuf> = files
         .iter()
-        .map(fs::canonicalize)
+        .map(path::absolute)
         .collect::<io::Result<_>>()?;
 
     let files_to_move = {
@@ -219,6 +219,44 @@ mod tests {
             test_dir,
             &test_dir.join("dotfiles/group_name"),
             &files_to_import,
+        )
+        .unwrap();
+
+        let home_result = expected_home.symlink_read_structure_at(".").unwrap();
+        assert_eq!(home_result, expected_home);
+        let dotfiles_result = expected_dotfiles.symlink_read_structure_at(".").unwrap();
+        assert_eq!(dotfiles_result, expected_dotfiles);
+    }
+
+    #[test]
+    fn test_import_symlink_itself() {
+        let (_dropper, test_dir) = cd_to_testdir().unwrap();
+
+        let home = tree! {
+            link -> any_target
+        };
+        let dotfiles = tree! {
+            dotfiles: [
+                group: []
+            ]
+        };
+
+        let expected_home = tree! {};
+        let expected_dotfiles = tree! {
+            dotfiles: [
+                group: [
+                    link -> any_target
+                ]
+            ]
+        };
+
+        home.write_at(".").unwrap();
+        dotfiles.write_at(".").unwrap();
+
+        import(
+            test_dir,
+            &test_dir.join("dotfiles/group"),
+            ["link"].map(PathBuf::from).as_slice(),
         )
         .unwrap();
 

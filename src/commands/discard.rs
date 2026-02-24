@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::path::{self, Path, PathBuf};
 
 use anyhow::{Context, anyhow};
 use fs_err::{self as fs};
@@ -28,6 +28,8 @@ fn prepare_discard_and_run_checks(
     home_dir: &Path,
     absolute_group_path: &Path,
 ) -> anyhow::Result<FileToDiscard> {
+    let absolute = path::absolute(path)?;
+
     // TODO: document this
     // File path must either point exactly to:
     // - A relative path pointing exactly to a file in dotfiles
@@ -35,36 +37,35 @@ fn prepare_discard_and_run_checks(
     // - A relative path pointing exactly to a symlink at home dir
     // - An absolut path pointing exactly to a symlink at home dir
     // - A piece of path that, when appended like `$HOME/dotfiles/dotfile_folder/{append_here}` refers to a file
-    let (relative_path_piece, absolute_dotfile_path) =
-        if let Ok(canonicalized) = fs::canonicalize(path) {
-            let stripped_home = canonicalized.strip_prefix(home_dir);
-            let stripped_dotfiles = canonicalized.strip_prefix(absolute_group_path);
+    let (relative_path_piece, absolute_dotfile_path) = if try_exists(&absolute)? {
+        let stripped_home = absolute.strip_prefix(home_dir);
+        let stripped_dotfiles = absolute.strip_prefix(absolute_group_path);
 
-            if let Ok(relative) = stripped_dotfiles {
-                // Lives in dotfiles, the absolute path is already what we want
-                (relative.to_owned(), canonicalized)
-            } else if let Ok(stripped) = stripped_home {
-                // File found at home, user pointed directly to that, check if it exists in the dotfiles folder
-                let joined = absolute_group_path.join(stripped);
-                if !try_exists(&joined)? {
-                    return Err(anyhow!("couldn't find file at {joined:?} to discard"));
-                }
-
-                (stripped.to_owned(), joined)
-            } else {
-                return Err(anyhow!("error: given path {path:?} is outside of $HOME"));
+        if let Ok(relative) = stripped_dotfiles {
+            // Lives in dotfiles, the absolute path is already what we want
+            (relative.to_owned(), absolute)
+        } else if let Ok(stripped) = stripped_home {
+            // File found at home, user pointed directly to that, check if it exists in the dotfiles folder
+            let joined = absolute_group_path.join(stripped);
+            if !try_exists(&joined)? {
+                return Err(anyhow!("couldn't find file at {joined:?} to discard"));
             }
+
+            (stripped.to_owned(), joined)
         } else {
-            // Fallback to the last candidate, which is: path is a piece
-            // that points to a file in the dotfiles folder if we join it
-            // and read it
-            let relative_path_inside_group = absolute_group_path.join(path);
-            if !try_exists(&relative_path_inside_group)? {
-                // TODO: any way to improve this error message? I fell like we need to
-                return Err(anyhow!("couldn't find {path:?} to discard it"));
-            }
-            (path.to_owned(), relative_path_inside_group)
-        };
+            return Err(anyhow!("error: given path {path:?} is outside of $HOME"));
+        }
+    } else {
+        // Fallback to the last candidate, which is: path is a piece
+        // that points to a file in the dotfiles folder if we join it
+        // and read it
+        let relative_path_inside_group = absolute_group_path.join(path);
+        if !try_exists(&relative_path_inside_group)? {
+            // TODO: any way to improve this error message? I fell like we need to
+            return Err(anyhow!("couldn't find {path:?} to discard it"));
+        }
+        (path.to_owned(), relative_path_inside_group)
+    };
 
     let equivalent_home_path = home_dir.join(&relative_path_piece);
 
@@ -163,7 +164,7 @@ pub fn discard(
     }
 
     for file in files_to_discard {
-        assert!(file.absolute_dotfile_path.exists());
+        assert!(try_exists(&file.absolute_dotfile_path).is_ok());
 
         match file.conflict_resolution {
             ConflictResolution::None => {}
@@ -498,6 +499,44 @@ pub mod tests {
             ["dir/parent", "dir/parent/file"]
                 .map(PathBuf::from)
                 .as_slice(),
+        )
+        .unwrap();
+
+        let home_result = expected_home.symlink_read_structure_at(".").unwrap();
+        assert_eq!(home_result, expected_home);
+        let dotfiles_result = expected_dotfiles.symlink_read_structure_at(".").unwrap();
+        assert_eq!(dotfiles_result, expected_dotfiles);
+    }
+
+    #[test]
+    fn test_discard_symlink_itself() {
+        let (_dropper, test_dir) = cd_to_testdir().unwrap();
+
+        let home = tree! {};
+        let dotfiles = tree! {
+            dotfiles: [
+                group: [
+                    link -> any_target
+                ]
+            ]
+        };
+
+        let expected_home = tree! {
+            link -> any_target
+        };
+        let expected_dotfiles = tree! {
+            dotfiles: [
+                group: []
+            ]
+        };
+
+        home.write_at(".").unwrap();
+        dotfiles.write_at(".").unwrap();
+
+        discard(
+            test_dir,
+            &test_dir.join("dotfiles/group"),
+            ["link"].map(PathBuf::from).as_slice(),
         )
         .unwrap();
 
