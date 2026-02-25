@@ -98,9 +98,10 @@ pub fn import(home_path: &Path, absolute_group_path: &Path, files: &[PathBuf]) -
         let parent_directory = to_path.parent().unwrap();
 
         if try_exists(parent_directory)? {
-            if !parent_directory.is_dir() {
-                panic!("Cannot create file at {parent_directory:?}, there's a file there.");
-            }
+            assert!(
+                parent_directory.is_dir(),
+                "Cannot create file at {parent_directory:?}, there's a file there.",
+            );
         } else if parent_directory != absolute_group_path {
             intermediate_directories_to_create.push(parent_directory);
         }
@@ -158,8 +159,10 @@ fn check_conflict_resolution(from: &Path, to: &Path) -> Result<ImportConflictRes
 
     use FileType::*;
     let conflict_resolution = match (type_from, type_to) {
-        (_, Regular) if to.metadata()?.len() == 0 => ImportConflictResolution::DeleteRegularFile,
-        (_, Directory) if to.read_dir()?.next().is_none() => ImportConflictResolution::DeleteDir,
+        (_, Regular) if fs::symlink_metadata(to)?.len() == 0 => {
+            ImportConflictResolution::DeleteRegularFile
+        }
+        (_, Directory) if fs::read_dir(to)?.next().is_none() => ImportConflictResolution::DeleteDir,
         (Regular, Regular) => {
             ensure_files_match_content(from, to)?;
             ImportConflictResolution::SkipThis
@@ -563,9 +566,7 @@ mod tests {
         dotfiles.write_structure_at(".").unwrap();
 
         let read_file_modify_time = || {
-            test_dir
-                .join("dotfiles/group/link")
-                .symlink_metadata()
+            fs::symlink_metadata(test_dir.join("dotfiles/group/link"))
                 .unwrap()
                 .modified()
                 .unwrap()

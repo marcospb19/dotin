@@ -8,7 +8,7 @@ use std::{
 };
 
 use eyre::{OptionExt, WrapErr, eyre};
-use fs_err::{self as fs, PathExt};
+use fs_err::{self as fs};
 use indexmap::IndexMap;
 
 use crate::Result;
@@ -132,7 +132,7 @@ fn expensive_folder_copy(from: PathBuf, to: PathBuf) -> Result<()> {
     stack.push((from, to));
 
     while let Some((from, to)) = stack.pop() {
-        if from.fs_err_metadata()?.is_dir() {
+        if fs::symlink_metadata(&from)?.is_dir() {
             fs::create_dir_all(&to)?;
             for entry in fs::read_dir(from)? {
                 let entry = entry?;
@@ -193,7 +193,7 @@ impl PathTrie {
     /// - Panics if `path` isn't absolute.
     pub fn insert(&mut self, path: &Path) {
         debug_assert!(path.is_absolute(), "PathTrie only accepts absolute paths");
-        self.insert_recursive(path)
+        self.insert_recursive(path);
     }
 
     fn insert_recursive(&mut self, path: &Path) {
@@ -206,7 +206,7 @@ impl PathTrie {
             if rest.iter().next().is_none() {
                 node.is_path = true;
             }
-            node.insert_recursive(rest)
+            node.insert_recursive(rest);
         }
     }
 }
@@ -240,8 +240,8 @@ fn path_split_first(path: &Path) -> (Option<&OsStr>, &Path) {
 #[expect(unused)]
 /// Check if files at the two paths are in the same filesystem.
 fn are_in_the_same_filesystem(a: &Path, b: &Path) -> io::Result<bool> {
-    let a = fs::metadata(a)?.dev();
-    let b = fs::metadata(b)?.dev();
+    let a = fs::symlink_metadata(a)?.dev();
+    let b = fs::symlink_metadata(b)?.dev();
     Ok(a == b)
 }
 

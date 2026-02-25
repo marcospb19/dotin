@@ -18,7 +18,7 @@ pub fn link(home_dir: &Path, group_dir: &Path, group_name: &str) -> Result<()> {
 
     let mut intermediate_directories_linked = vec![];
 
-    for (group_node, relative_path) in group_tree.iter() {
+    for (group_node, relative_path) in &group_tree {
         // Skip children where the parent directory is already linked
         if intermediate_directories_linked
             .iter()

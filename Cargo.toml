@@ -28,3 +28,6 @@ lto = true
 [lints.clippy]
 todo = "warn"
 dbg_macro = "warn"
+unnecessary_semicolon = "warn"
+explicit_iter_loop = "warn"
+semicolon_if_nothing_returned = "warn"

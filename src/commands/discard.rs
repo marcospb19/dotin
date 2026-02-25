@@ -104,7 +104,7 @@ fn prepare_discard_and_run_checks(
                 }
                 FileType::Directory => {
                     // Allow discarding if there is an empty directory at the same place
-                    let is_empty_dir = equivalent_home_path.read_dir()?.next().is_none();
+                    let is_empty_dir = fs::read_dir(&equivalent_home_path)?.next().is_none();
                     if is_empty_dir {
                         break 'conflict_check DiscardConflictResolution::DeleteDir;
                     }
@@ -131,7 +131,7 @@ fn prepare_discard_and_run_checks(
                     ));
                 }
             }
-        };
+        }
 
         DiscardConflictResolution::None
     };

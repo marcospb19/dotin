@@ -13,7 +13,7 @@ pub fn unlink(home_dir: &Path, group_dir: &Path, group_name: &str) -> Result<()>
         .symlink_read_structure_at(home_dir)
         .wrap_err("Failed to read dotfiles tree at home directory")?;
 
-    for (node, relative_path) in home_tree.iter() {
+    for (node, relative_path) in &home_tree {
         let Some(current_target) = node.target() else {
             continue;
         };
