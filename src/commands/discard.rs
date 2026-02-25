@@ -70,6 +70,9 @@ fn prepare_discard_and_run_checks(
     let equivalent_home_path = home_dir.join(&relative_path_piece);
 
     let conflict_resolution = 'conflict_check: {
+        // TODO: add check for conflict where `from` and `to` types mismatch
+        // and just err.
+
         // If file already exists at home, check if it's a scenario of conflict error
         if try_exists(&equivalent_home_path)? {
             let file_type = read_file_type(&equivalent_home_path)?;
@@ -208,14 +211,14 @@ pub mod tests {
         home.write_at(".").unwrap();
         dotfiles.write_at(".").unwrap();
 
-        let error = discard(
+        let error_message = discard(
             test_dir,
             &test_dir.join("dotfiles/example_group"),
             ["discarded_path"].map(PathBuf::from).as_slice(),
         )
-        .unwrap_err();
+        .unwrap_err()
+        .to_string();
 
-        let error_message = format!("{error}");
         assert!(error_message.contains("already exists, so"));
         assert!(error_message.contains("cannot be discarded to that place"));
     }
@@ -278,14 +281,14 @@ pub mod tests {
         home.write_at(".").unwrap();
         dotfiles.write_at(".").unwrap();
 
-        let error = discard(
+        let error_message = discard(
             test_dir,
             &test_dir.join("dotfiles/example_group"),
             ["discarded_path"].map(PathBuf::from).as_slice(),
         )
-        .unwrap_err();
+        .unwrap_err()
+        .to_string();
 
-        let error_message = format!("{error}");
         assert!(error_message.contains("non-empty directory at"));
         assert!(error_message.contains("already exists, couldn't discard"));
     }
@@ -351,14 +354,14 @@ pub mod tests {
         home.write_at(".").unwrap();
         dotfiles.write_at(".").unwrap();
 
-        let error = discard(
+        let error_message = discard(
             test_dir,
             &test_dir.join("dotfiles/example_group"),
             ["discarded_path"].map(PathBuf::from).as_slice(),
         )
-        .unwrap_err();
+        .unwrap_err()
+        .to_string();
 
-        let error_message = format!("{error}");
         assert!(error_message.contains("there is a symlink at"));
         assert!(error_message.contains("but it points to"));
     }
