@@ -8,8 +8,8 @@ description = "A simple dotfiles manager inspired by `stow`."
 anyhow = "1.0.100"
 clap = { version = "4.4.4", features = ["derive"] }
 file_type_enum = "3.0.1"
-fs-err = "3.2.2"
-fs-tree = { version = "0.7.1", features = ["fs-err"] }
+fs-err = "3.3.0"
+fs-tree = { version = "0.8.2" }
 indexmap = "2.13.0"
 rapidhash = "4.4.1"
 

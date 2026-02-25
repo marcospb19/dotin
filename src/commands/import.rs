@@ -282,8 +282,8 @@ mod tests {
             ]
         };
 
-        home.write_at(".").unwrap();
-        dotfiles.write_at(".").unwrap();
+        home.write_structure_at(".").unwrap();
+        dotfiles.write_structure_at(".").unwrap();
 
         import(
             test_dir,
@@ -320,8 +320,8 @@ mod tests {
             ]
         };
 
-        home.write_at(".").unwrap();
-        dotfiles.write_at(".").unwrap();
+        home.write_structure_at(".").unwrap();
+        dotfiles.write_structure_at(".").unwrap();
 
         import(
             test_dir,
@@ -351,8 +351,8 @@ mod tests {
             ]
         };
 
-        home.write_at(".").unwrap();
-        dotfiles.write_at(".").unwrap();
+        home.write_structure_at(".").unwrap();
+        dotfiles.write_structure_at(".").unwrap();
         // Importing fails cause the two files have different contents
         let file_at_home = test_dir.join("file");
         let file_at_dotfiles = test_dir.join("dotfiles/group/file");
@@ -389,8 +389,8 @@ mod tests {
         let expected_home = tree! {};
         let expected_dotfiles = dotfiles.clone();
 
-        home.write_at(".").unwrap();
-        dotfiles.write_at(".").unwrap();
+        home.write_structure_at(".").unwrap();
+        dotfiles.write_structure_at(".").unwrap();
         // Importing succeeds cause two files have same content
         let file_at_home = test_dir.join("file");
         let file_at_dotfiles = test_dir.join("dotfiles/group/file");
@@ -441,8 +441,8 @@ mod tests {
             ]
         };
 
-        home.write_at(".").unwrap();
-        dotfiles.write_at(".").unwrap();
+        home.write_structure_at(".").unwrap();
+        dotfiles.write_structure_at(".").unwrap();
 
         let error_message = import(
             test_dir,
@@ -484,8 +484,8 @@ mod tests {
             ]
         };
 
-        home.write_at(".").unwrap();
-        dotfiles.write_at(".").unwrap();
+        home.write_structure_at(".").unwrap();
+        dotfiles.write_structure_at(".").unwrap();
 
         import(
             test_dir,
@@ -515,8 +515,8 @@ mod tests {
             ]
         };
 
-        home.write_at(".").unwrap();
-        dotfiles.write_at(".").unwrap();
+        home.write_structure_at(".").unwrap();
+        dotfiles.write_structure_at(".").unwrap();
 
         let error_message = import(
             test_dir,
@@ -548,8 +548,8 @@ mod tests {
         let expected_home = tree! {};
         let expected_dotfiles = dotfiles.clone();
 
-        home.write_at(".").unwrap();
-        dotfiles.write_at(".").unwrap();
+        home.write_structure_at(".").unwrap();
+        dotfiles.write_structure_at(".").unwrap();
 
         let read_file_modify_time = || {
             test_dir

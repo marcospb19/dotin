@@ -105,8 +105,8 @@ mod tests {
             ]
         };
 
-        home.write_at(".").unwrap();
-        dotfiles.write_at(".").unwrap();
+        home.write_structure_at(".").unwrap();
+        dotfiles.write_structure_at(".").unwrap();
 
         link(test_dir, &test_dir.join("dotfiles/i3"), "i3").unwrap();
 

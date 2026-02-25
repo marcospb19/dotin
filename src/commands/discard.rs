@@ -208,8 +208,8 @@ pub mod tests {
             ]
         };
 
-        home.write_at(".").unwrap();
-        dotfiles.write_at(".").unwrap();
+        home.write_structure_at(".").unwrap();
+        dotfiles.write_structure_at(".").unwrap();
 
         let error_message = discard(
             test_dir,
@@ -246,8 +246,8 @@ pub mod tests {
             ]
         };
 
-        home.write_at(".").unwrap();
-        dotfiles.write_at(".").unwrap();
+        home.write_structure_at(".").unwrap();
+        dotfiles.write_structure_at(".").unwrap();
 
         discard(
             test_dir,
@@ -278,8 +278,8 @@ pub mod tests {
             ]
         };
 
-        home.write_at(".").unwrap();
-        dotfiles.write_at(".").unwrap();
+        home.write_structure_at(".").unwrap();
+        dotfiles.write_structure_at(".").unwrap();
 
         let error_message = discard(
             test_dir,
@@ -319,8 +319,8 @@ pub mod tests {
             ]
         };
 
-        home.write_at(".").unwrap();
-        dotfiles.write_at(".").unwrap();
+        home.write_structure_at(".").unwrap();
+        dotfiles.write_structure_at(".").unwrap();
 
         discard(
             test_dir,
@@ -351,8 +351,8 @@ pub mod tests {
             ]
         };
 
-        home.write_at(".").unwrap();
-        dotfiles.write_at(".").unwrap();
+        home.write_structure_at(".").unwrap();
+        dotfiles.write_structure_at(".").unwrap();
 
         let error_message = discard(
             test_dir,
@@ -447,8 +447,8 @@ pub mod tests {
             ]
         };
 
-        home.write_at(".").unwrap();
-        dotfiles.write_at(".").unwrap();
+        home.write_structure_at(".").unwrap();
+        dotfiles.write_structure_at(".").unwrap();
 
         discard(
             test_dir,
@@ -493,8 +493,8 @@ pub mod tests {
             ]
         };
 
-        home.write_at(".").unwrap();
-        dotfiles.write_at(".").unwrap();
+        home.write_structure_at(".").unwrap();
+        dotfiles.write_structure_at(".").unwrap();
 
         discard(
             test_dir,
@@ -533,8 +533,8 @@ pub mod tests {
             ]
         };
 
-        home.write_at(".").unwrap();
-        dotfiles.write_at(".").unwrap();
+        home.write_structure_at(".").unwrap();
+        dotfiles.write_structure_at(".").unwrap();
 
         discard(
             test_dir,
