@@ -1,17 +1,17 @@
 use std::path::Path;
 
-use anyhow::Context;
+use eyre::WrapErr;
 use fs_err as fs;
 use fs_tree::FsTree;
 
-use crate::utils::create_relative_symlink_target_path;
+use crate::{Result, utils::create_relative_symlink_target_path};
 
-pub fn unlink(home_dir: &Path, group_dir: &Path, group_name: &str) -> anyhow::Result<()> {
-    let group_tree = FsTree::symlink_read_at(group_dir).context("reading dotfiles folder tree")?;
+pub fn unlink(home_dir: &Path, group_dir: &Path, group_name: &str) -> Result<()> {
+    let group_tree = FsTree::symlink_read_at(group_dir).wrap_err("reading dotfiles folder tree")?;
 
     let home_tree = group_tree
         .symlink_read_structure_at(home_dir)
-        .context("Failed to read dotfiles tree at home directory")?;
+        .wrap_err("Failed to read dotfiles tree at home directory")?;
 
     for (node, relative_path) in home_tree.iter() {
         let Some(current_target) = node.target() else {
@@ -24,7 +24,7 @@ pub fn unlink(home_dir: &Path, group_dir: &Path, group_name: &str) -> anyhow::Re
         // unlink if the link points to the expected target
         if symlink_target == current_target {
             println!("Deleting link at {home_absolute:?}");
-            fs::remove_file(home_absolute).context("Failed to delete symlink")?;
+            fs::remove_file(home_absolute).wrap_err("Failed to delete symlink")?;
         } else {
             println!(
                 "ERROR: {home_absolute:?} exists but points to {current_target:?} instead of {symlink_target:?}"

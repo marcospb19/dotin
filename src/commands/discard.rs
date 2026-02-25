@@ -1,9 +1,12 @@
 use std::path::{self, Path, PathBuf};
 
-use anyhow::{Context, anyhow};
+use eyre::{WrapErr, eyre};
 use fs_err::{self as fs};
 
-use crate::utils::{FileType, PathTrie, cheap_move_with_fallback, read_file_type, try_exists};
+use crate::{
+    Result,
+    utils::{FileType, PathTrie, cheap_move_with_fallback, read_file_type, try_exists},
+};
 
 #[derive(Debug)]
 struct FileToDiscard {
@@ -27,7 +30,7 @@ fn prepare_discard_and_run_checks(
     path: &Path,
     home_dir: &Path,
     absolute_group_path: &Path,
-) -> anyhow::Result<FileToDiscard> {
+) -> Result<FileToDiscard> {
     let absolute = path::absolute(path)?;
 
     // TODO: document this
@@ -48,12 +51,12 @@ fn prepare_discard_and_run_checks(
             // File found at home, user pointed directly to that, check if it exists in the dotfiles folder
             let joined = absolute_group_path.join(stripped);
             if !try_exists(&joined)? {
-                return Err(anyhow!("couldn't find file at {joined:?} to discard"));
+                return Err(eyre!("couldn't find file at {joined:?} to discard"));
             }
 
             (stripped.to_owned(), joined)
         } else {
-            return Err(anyhow!("error: given path {path:?} is outside of $HOME"));
+            return Err(eyre!("error: given path {path:?} is outside of $HOME"));
         }
     } else {
         // Fallback to the last candidate, which is: path is a piece
@@ -62,7 +65,7 @@ fn prepare_discard_and_run_checks(
         let relative_path_inside_group = absolute_group_path.join(path);
         if !try_exists(&relative_path_inside_group)? {
             // TODO: any way to improve this error message? I fell like we need to
-            return Err(anyhow!("couldn't find {path:?} to discard it"));
+            return Err(eyre!("couldn't find {path:?} to discard it"));
         }
         (path.to_owned(), relative_path_inside_group)
     };
@@ -83,17 +86,17 @@ fn prepare_discard_and_run_checks(
             ) && a != b
                 && b != FileType::Directory
             {
-                return Err(anyhow!(
+                return Err(eyre!(
                     "can't discard {path:?}, it conflicts with {equivalent_home_path:?}, \
                      and their types are different",
                 )
-                .context(format!("{path:?} has type {a}")))
-                .context(format!("{equivalent_home_path:?} has type {b}"));
+                .wrap_err(format!("{path:?} has type {a}")))
+                .wrap_err(format!("{equivalent_home_path:?} has type {b}"));
             }
 
             match file_type {
                 FileType::Regular => {
-                    return Err(anyhow!(
+                    return Err(eyre!(
                         "file at {:?} already exists, so {:?} cannot be discarded to that place",
                         equivalent_home_path,
                         path,
@@ -106,7 +109,7 @@ fn prepare_discard_and_run_checks(
                         break 'conflict_check DiscardConflictResolution::DeleteDir;
                     }
 
-                    return Err(anyhow!(
+                    return Err(eyre!(
                         "non-empty directory at {:?} already exists, couldn't discard {:?}",
                         equivalent_home_path,
                         path,
@@ -123,7 +126,7 @@ fn prepare_discard_and_run_checks(
                         break 'conflict_check DiscardConflictResolution::DeleteSymlink;
                     }
 
-                    return Err(anyhow!(
+                    return Err(eyre!(
                         "there is a symlink at {equivalent_home_path:?}, but it points to {target:?} and not {absolute_dotfile_path:?}"
                     ));
                 }
@@ -142,16 +145,12 @@ fn prepare_discard_and_run_checks(
     })
 }
 
-pub fn discard(
-    home_dir: &Path,
-    absolute_group_path: &Path,
-    paths: &[PathBuf],
-) -> anyhow::Result<()> {
+pub fn discard(home_dir: &Path, absolute_group_path: &Path, paths: &[PathBuf]) -> Result<()> {
     let files_to_discard = {
         let mut files: Vec<FileToDiscard> = paths
             .iter()
             .map(|path| prepare_discard_and_run_checks(path, home_dir, absolute_group_path))
-            .collect::<anyhow::Result<_>>()?;
+            .collect::<Result<_>>()?;
 
         if files.is_empty() {
             println!("No files to discard.");
@@ -194,7 +193,7 @@ pub fn discard(
         }
 
         cheap_move_with_fallback(&file.absolute_dotfile_path, &file.equivalent_home_path)
-            .with_context(|| format!("while discarding {:?}", file.user_given_path))?;
+            .wrap_err_with(|| format!("while discarding {:?}", file.user_given_path))?;
     }
 
     Ok(())

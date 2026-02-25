@@ -3,10 +3,13 @@ use std::{
     path::{self, Path, PathBuf},
 };
 
-use anyhow::{Context, anyhow, bail};
+use eyre::{WrapErr, eyre};
 use fs_err::{self as fs};
 
-use crate::utils::{self, FileType, cheap_move_with_fallback, read_file_type, try_exists};
+use crate::{
+    Result,
+    utils::{self, FileType, cheap_move_with_fallback, read_file_type, try_exists},
+};
 
 #[derive(Debug)]
 struct FileToMove<'a> {
@@ -24,11 +27,7 @@ enum ImportConflictResolution {
     SkipThis,
 }
 
-pub fn import(
-    home_path: &Path,
-    absolute_group_path: &Path,
-    files: &[PathBuf],
-) -> anyhow::Result<()> {
+pub fn import(home_path: &Path, absolute_group_path: &Path, files: &[PathBuf]) -> Result<()> {
     let dotfiles_folder = absolute_group_path
         .parent()
         .expect("Internal error, malformed dotfiles folder");
@@ -77,10 +76,10 @@ pub fn import(
                 };
                 files_to_move.push(file);
             } else {
-                bail!(
+                return Err(eyre!(
                     "`dotin` can only import files inside of home directory {home_path:?}, \
                      but {path:?} seems to be outside of it."
-                );
+                ));
             }
         }
 
@@ -91,7 +90,7 @@ pub fn import(
         println!("No files to move.");
     }
 
-    utils::create_folder_at(absolute_group_path).context("create folder for group")?;
+    utils::create_folder_at(absolute_group_path).wrap_err("create folder for group")?;
 
     let mut intermediate_directories_to_create = vec![];
 
@@ -116,7 +115,7 @@ pub fn import(
         );
 
         for dir in &intermediate_directories_to_create {
-            fs::create_dir_all(dir).context("Failed to create intermediate directory")?;
+            fs::create_dir_all(dir).wrap_err("Failed to create intermediate directory")?;
         }
     }
 
@@ -144,13 +143,13 @@ pub fn import(
                 continue;
             }
         }
-        cheap_move_with_fallback(path, to_path).context("Failed to move file to import")?;
+        cheap_move_with_fallback(path, to_path).wrap_err("Failed to move file to import")?;
     }
 
     Ok(())
 }
 
-fn check_conflict_resolution(from: &Path, to: &Path) -> anyhow::Result<ImportConflictResolution> {
+fn check_conflict_resolution(from: &Path, to: &Path) -> Result<ImportConflictResolution> {
     if !try_exists(to)? {
         return Ok(ImportConflictResolution::None);
     }
@@ -166,7 +165,7 @@ fn check_conflict_resolution(from: &Path, to: &Path) -> anyhow::Result<ImportCon
             ImportConflictResolution::SkipThis
         }
         (Directory, Directory) => {
-            return Err(anyhow!(
+            return Err(eyre!(
                 "can't import {:?}, there is a non-empty directory at {:?}",
                 from,
                 to,
@@ -182,7 +181,7 @@ fn check_conflict_resolution(from: &Path, to: &Path) -> anyhow::Result<ImportCon
         | (Directory, Symlink)
         | (Symlink, Directory)
         | (Symlink, Regular) => {
-            return Err(anyhow!(
+            return Err(eyre!(
                 "can't import {:?}, it conflicts with {:?}, and their types \
                 are different",
                 from,
@@ -194,7 +193,7 @@ fn check_conflict_resolution(from: &Path, to: &Path) -> anyhow::Result<ImportCon
     Ok(conflict_resolution)
 }
 
-fn ensure_files_match_content(from_path: &Path, to_path: &Path) -> anyhow::Result<()> {
+fn ensure_files_match_content(from_path: &Path, to_path: &Path) -> Result<()> {
     let from = fs::File::open(from_path)?;
     let to = fs::File::open(to_path)?;
 
@@ -228,18 +227,18 @@ fn ensure_files_match_content(from_path: &Path, to_path: &Path) -> anyhow::Resul
     }
 
     if from_len != to_len || !content_match(from, to)? {
-        return Err(anyhow!(
+        return Err(eyre!(
             "can't import {from_path:?}, it conflicts with {to_path:?}, and their content is different",
         ));
     }
     Ok(())
 }
 
-fn ensure_symlinks_match_target(from_path: &Path, to_path: &Path) -> anyhow::Result<()> {
+fn ensure_symlinks_match_target(from_path: &Path, to_path: &Path) -> Result<()> {
     assert_eq!(FileType::Symlink, read_file_type(from_path)?);
     assert_eq!(FileType::Symlink, read_file_type(to_path)?);
     if fs::read_link(from_path)? != fs::read_link(to_path)? {
-        return Err(anyhow!(
+        return Err(eyre!(
             "can't import {from_path:?}, it conflicts with {to_path:?}, they're both symlinks but their targets are different",
         ));
     }

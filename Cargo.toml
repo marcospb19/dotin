@@ -5,8 +5,9 @@ edition = "2024"
 description = "A simple dotfiles manager inspired by `stow`."
 
 [dependencies]
-anyhow = "1.0.100"
 clap = { version = "4.4.4", features = ["derive"] }
+color-eyre = { version = "0.6.5", default-features = false, features = ["track-caller"] }
+eyre = { version = "0.6.12", default-features = false, features = ["track-caller"] }
 file_type_enum = "3.0.1"
 fs-err = "3.3.0"
 fs-tree = { version = "0.8.2" }

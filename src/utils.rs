@@ -7,9 +7,11 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use anyhow::{Context, bail};
+use eyre::{OptionExt, WrapErr, eyre};
 use fs_err::{self as fs, PathExt};
 use indexmap::IndexMap;
+
+use crate::Result;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FileType {
@@ -28,7 +30,7 @@ impl fmt::Display for FileType {
     }
 }
 
-pub fn read_file_type(path: impl AsRef<Path>) -> anyhow::Result<FileType> {
+pub fn read_file_type(path: impl AsRef<Path>) -> Result<FileType> {
     use file_type_enum::FileType::*;
 
     let path = path.as_ref();
@@ -36,15 +38,17 @@ pub fn read_file_type(path: impl AsRef<Path>) -> anyhow::Result<FileType> {
         Regular => Ok(FileType::Regular),
         Directory => Ok(FileType::Directory),
         Symlink => Ok(FileType::Symlink),
-        variant => bail!("path {path:?}, is a {variant}, which isn't supported"),
+        variant => Err(eyre!(
+            "path {path:?}, is a {variant}, which isn't supported"
+        )),
     }
 }
 
-pub fn get_home_dir() -> anyhow::Result<PathBuf> {
-    let home_env_var =
-        env::var_os("HOME").context("Failed to read user's home directory, try setting $HOME")?;
+pub fn get_home_dir() -> Result<PathBuf> {
+    let home_env_var = env::var_os("HOME")
+        .ok_or_eyre("Failed to read user's home directory, try setting $HOME")?;
 
-    fs::canonicalize(&*home_env_var).context("Failed to read path at $HOME")
+    fs::canonicalize(&*home_env_var).wrap_err("Failed to read path at $HOME")
 }
 
 /// Reimplement `try_exists` so it works when `path` points to a symlink and
@@ -58,8 +62,8 @@ pub fn try_exists(path: impl AsRef<Path>) -> io::Result<bool> {
 }
 
 /// Creates a symlink at `link_location` that points to `original`.
-pub fn create_symlink(link_location: &Path, original: &Path) -> anyhow::Result<()> {
-    symlink(original, link_location).with_context(|| {
+pub fn create_symlink(link_location: &Path, original: &Path) -> Result<()> {
+    symlink(original, link_location).wrap_err_with(|| {
         format!("Failed to create symlink at {link_location:?} pointing to {original:?}")
     })
 }
@@ -74,31 +78,29 @@ pub fn create_relative_symlink_target_path(relative_path: &Path, group_name: &st
         .join(relative_path)
 }
 
-pub fn create_folder_at(folder_path: &Path) -> anyhow::Result<()> {
+pub fn create_folder_at(folder_path: &Path) -> Result<()> {
     match fs::symlink_metadata(folder_path) {
         Ok(_) => {
             let file_type = read_file_type(folder_path)?;
             match file_type {
                 FileType::Directory => Ok(()),
-                FileType::Regular => {
-                    bail!(
-                        "can't create folder at {folder_path:?}, a regular file exists at that path"
-                    )
-                }
-                FileType::Symlink => {
-                    bail!("can't create folder at {folder_path:?}, a symlink exists at that path")
-                }
+                FileType::Regular => Err(eyre!(
+                    "can't create folder at {folder_path:?}, a regular file exists at that path"
+                )),
+                FileType::Symlink => Err(eyre!(
+                    "can't create folder at {folder_path:?}, a symlink exists at that path"
+                )),
             }
         }
         Err(err) if err.kind() == io::ErrorKind::NotFound => {
             println!("creating folder at {folder_path:?}");
-            fs::create_dir_all(folder_path).context("creating folder")
+            fs::create_dir_all(folder_path).wrap_err("creating folder")
         }
         Err(err) => Err(err.into()),
     }
 }
 
-pub fn cheap_move_with_fallback(from: &Path, to: &Path) -> anyhow::Result<()> {
+pub fn cheap_move_with_fallback(from: &Path, to: &Path) -> Result<()> {
     if let Some(to_parent) = to.parent()
         && !try_exists(to_parent)?
     {
@@ -113,8 +115,8 @@ pub fn cheap_move_with_fallback(from: &Path, to: &Path) -> anyhow::Result<()> {
                 expensive_folder_copy(from.to_owned(), to.to_owned())?;
             } else {
                 // non-dir fallback
-                fs::copy(from, to).context("while trying to move file")?;
-                fs::remove_file(from).context("removing file after copy (mv operation)")?;
+                fs::copy(from, to).wrap_err("while trying to move file")?;
+                fs::remove_file(from).wrap_err("removing file after copy (mv operation)")?;
             }
         } else {
             return Err(err.into());
@@ -123,7 +125,7 @@ pub fn cheap_move_with_fallback(from: &Path, to: &Path) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn expensive_folder_copy(from: PathBuf, to: PathBuf) -> anyhow::Result<()> {
+fn expensive_folder_copy(from: PathBuf, to: PathBuf) -> Result<()> {
     // Use a stack to avoid too-many-files error (this can't ever stack
     // overflow due to Linux's path size limit)
     let mut stack = Vec::new();

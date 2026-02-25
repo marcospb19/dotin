@@ -2,3 +2,5 @@
 
 pub mod commands;
 pub mod utils;
+
+pub type Result<T, E = eyre::Error> = std::result::Result<T, E>;

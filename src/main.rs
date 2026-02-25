@@ -1,11 +1,12 @@
 use std::path::PathBuf;
 
-use anyhow::Context;
 use clap::Parser;
 use dotin::{
+    Result,
     commands::{discard, import, link, unlink},
     utils::{get_home_dir, try_exists},
 };
+use eyre::WrapErr;
 
 #[derive(Parser, Debug)]
 #[command(version, about)]
@@ -28,13 +29,9 @@ enum Command {
     Unlink { groups: Vec<String> },
 }
 
-fn main() {
-    if let Err(err) = run() {
-        eprintln!("EXITING: ERROR: {err}");
-    }
-}
+fn main() -> Result<()> {
+    color_eyre::install().unwrap();
 
-fn run() -> anyhow::Result<()> {
     let home_dir = &get_home_dir()?;
     let dotfiles_folder = home_dir.join("dotfiles");
 
@@ -49,7 +46,7 @@ fn run() -> anyhow::Result<()> {
 
             for group in &groups {
                 unlink(home_dir, &dotfiles_folder.join(group), group)
-                    .with_context(|| format!("Failed to unlink group \"{group}\""))?;
+                    .wrap_err_with(|| format!("Failed to unlink group \"{group}\""))?;
             }
         }
         Command::Link { groups } => {
@@ -61,13 +58,13 @@ fn run() -> anyhow::Result<()> {
                 let dotfiles_group_folder = &dotfiles_folder.join(group);
 
                 link(home_dir, dotfiles_group_folder, group)
-                    .with_context(|| format!("Failed to link group \"{group}\""))?;
+                    .wrap_err_with(|| format!("Failed to link group \"{group}\""))?;
             }
         }
         Command::Import { group_name, files } => {
             assert!(!files.is_empty(), "ensured by CLI definitions");
             import(home_dir, &dotfiles_folder.join(&group_name), &files)
-                .with_context(|| format!("Failed to import files for group \"{group_name}\""))?;
+                .wrap_err_with(|| format!("Failed to import files for group \"{group_name}\""))?;
         }
         Command::Discard { group_name, files } => {
             assert!(!files.is_empty(), "ensured by CLI definitions");
@@ -79,7 +76,7 @@ fn run() -> anyhow::Result<()> {
                 return Ok(());
             }
             discard(home_dir, &dotfiles_folder.join(&group_name), &files)
-                .with_context(|| format!("Failed to discard files for group \"{group_name}\""))?;
+                .wrap_err_with(|| format!("Failed to discard files for group \"{group_name}\""))?;
         }
     }
 

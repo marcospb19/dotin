@@ -1,17 +1,20 @@
 use std::path::Path;
 
-use anyhow::Context;
+use eyre::WrapErr;
 use fs_err as fs;
 use fs_tree::FsTree;
 
-use crate::utils::{self, create_relative_symlink_target_path};
+use crate::{
+    Result,
+    utils::{self, create_relative_symlink_target_path},
+};
 
-pub fn link(home_dir: &Path, group_dir: &Path, group_name: &str) -> anyhow::Result<()> {
-    let group_tree = FsTree::symlink_read_at(group_dir).context("reading dotfiles folder tree")?;
+pub fn link(home_dir: &Path, group_dir: &Path, group_name: &str) -> Result<()> {
+    let group_tree = FsTree::symlink_read_at(group_dir).wrap_err("reading dotfiles folder tree")?;
 
     let home_tree = group_tree
         .symlink_read_structure_at(home_dir)
-        .context("reading structured file tree at home directory")?;
+        .wrap_err("reading structured file tree at home directory")?;
 
     let mut intermediate_directories_linked = vec![];
 
@@ -59,7 +62,7 @@ pub fn link(home_dir: &Path, group_dir: &Path, group_name: &str) -> anyhow::Resu
                 utils::create_symlink(&home_absolute, &symlink_target)?;
                 println!("Linked {} at {relative_path:?}", group_node.variant_str());
             } else {
-                fs::create_dir(&home_absolute).context("creating directory for dotfile")?;
+                fs::create_dir(&home_absolute).wrap_err("creating directory for dotfile")?;
                 println!("Created intermediate directory at {home_absolute:?}");
             }
         }
