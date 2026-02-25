@@ -13,11 +13,11 @@ struct FileToDiscard {
     /// TODO: should we output this instead of `user_given_path`?
     #[expect(unused)]
     relative_path_piece: PathBuf,
-    conflict_resolution: ConflictResolution,
+    conflict_resolution: DiscardConflictResolution,
 }
 
 #[derive(Clone, Copy, Debug)]
-enum ConflictResolution {
+enum DiscardConflictResolution {
     None,
     DeleteDir,
     DeleteSymlink,
@@ -33,9 +33,9 @@ fn prepare_discard_and_run_checks(
     // TODO: document this
     // File path must either point exactly to:
     // - A relative path pointing exactly to a file in dotfiles
-    // - An absolut path pointing exactly to a file in dotfiles
+    // - An absolute path pointing exactly to a file in dotfiles
     // - A relative path pointing exactly to a symlink at home dir
-    // - An absolut path pointing exactly to a symlink at home dir
+    // - An absolute path pointing exactly to a symlink at home dir
     // - A piece of path that, when appended like `$HOME/dotfiles/dotfile_folder/{append_here}` refers to a file
     let (relative_path_piece, absolute_dotfile_path) = if try_exists(&absolute)? {
         let stripped_home = absolute.strip_prefix(home_dir);
@@ -77,25 +77,39 @@ fn prepare_discard_and_run_checks(
         if try_exists(&equivalent_home_path)? {
             let file_type = read_file_type(&equivalent_home_path)?;
 
+            if let (a, b) = (
+                read_file_type(path)?,
+                read_file_type(&equivalent_home_path)?,
+            ) && a != b
+                && b != FileType::Directory
+            {
+                return Err(anyhow!(
+                    "can't discard {path:?}, it conflicts with {equivalent_home_path:?}, \
+                     and their types are different",
+                )
+                .context(format!("{path:?} has type {a}")))
+                .context(format!("{equivalent_home_path:?} has type {b}"));
+            }
+
             match file_type {
                 FileType::Regular => {
                     return Err(anyhow!(
                         "file at {:?} already exists, so {:?} cannot be discarded to that place",
                         equivalent_home_path,
-                        absolute_dotfile_path,
+                        path,
                     ));
                 }
                 FileType::Directory => {
                     // Allow discarding if there is an empty directory at the same place
                     let is_empty_dir = equivalent_home_path.read_dir()?.next().is_none();
                     if is_empty_dir {
-                        break 'conflict_check ConflictResolution::DeleteDir;
+                        break 'conflict_check DiscardConflictResolution::DeleteDir;
                     }
 
                     return Err(anyhow!(
                         "non-empty directory at {:?} already exists, couldn't discard {:?}",
                         equivalent_home_path,
-                        absolute_dotfile_path,
+                        path,
                     ));
                 }
                 FileType::Symlink => {
@@ -106,7 +120,7 @@ fn prepare_discard_and_run_checks(
                     if let Ok(canonicalized) = fs::canonicalize(&target)
                         && canonicalized == absolute_dotfile_path
                     {
-                        break 'conflict_check ConflictResolution::DeleteSymlink;
+                        break 'conflict_check DiscardConflictResolution::DeleteSymlink;
                     }
 
                     return Err(anyhow!(
@@ -116,7 +130,7 @@ fn prepare_discard_and_run_checks(
             }
         };
 
-        ConflictResolution::None
+        DiscardConflictResolution::None
     };
 
     Ok(FileToDiscard {
@@ -170,11 +184,11 @@ pub fn discard(
         assert!(try_exists(&file.absolute_dotfile_path).is_ok());
 
         match file.conflict_resolution {
-            ConflictResolution::None => {}
-            ConflictResolution::DeleteDir => {
+            DiscardConflictResolution::None => {}
+            DiscardConflictResolution::DeleteDir => {
                 fs::remove_dir(&file.equivalent_home_path)?;
             }
-            ConflictResolution::DeleteSymlink => {
+            DiscardConflictResolution::DeleteSymlink => {
                 fs::remove_file(&file.equivalent_home_path)?;
             }
         }

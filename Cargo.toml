@@ -23,3 +23,7 @@ fs-err = { version = "3.2.2", features = ["debug"] }
 strip = true
 opt-level = "z"
 lto = true
+
+[lints.clippy]
+todo = "warn"
+dbg_macro = "warn"

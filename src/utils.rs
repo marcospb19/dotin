@@ -1,7 +1,7 @@
 use std::{
     env,
     ffi::{OsStr, OsString},
-    io,
+    fmt, io,
     iter::repeat_n,
     os::unix::fs::{MetadataExt, symlink},
     path::{Path, PathBuf},
@@ -18,9 +18,20 @@ pub enum FileType {
     Symlink,
 }
 
-pub fn read_file_type(path: &Path) -> anyhow::Result<FileType> {
+impl fmt::Display for FileType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            FileType::Regular => write!(f, "regular file"),
+            FileType::Directory => write!(f, "directory"),
+            FileType::Symlink => write!(f, "symlink"),
+        }
+    }
+}
+
+pub fn read_file_type(path: impl AsRef<Path>) -> anyhow::Result<FileType> {
     use file_type_enum::FileType::*;
 
+    let path = path.as_ref();
     match file_type_enum::FileType::symlink_read_at(path)? {
         Regular => Ok(FileType::Regular),
         Directory => Ok(FileType::Directory),
@@ -271,12 +282,6 @@ pub mod test_utils {
 
         Ok((holder, Box::leak(path)))
     }
-}
-
-#[derive(Debug)]
-pub struct FileToMove<'a> {
-    pub path: &'a Path,
-    pub to_path: PathBuf,
 }
 
 #[cfg(test)]

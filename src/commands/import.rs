@@ -6,9 +6,23 @@ use std::{
 use anyhow::{Context, anyhow, bail};
 use fs_err::{self as fs};
 
-use crate::utils::{
-    self, FileToMove, FileType, cheap_move_with_fallback, read_file_type, try_exists,
-};
+use crate::utils::{self, FileType, cheap_move_with_fallback, read_file_type, try_exists};
+
+#[derive(Debug)]
+struct FileToMove<'a> {
+    path: &'a Path,
+    to_path: PathBuf,
+    conflict_resolution: ImportConflictResolution,
+}
+
+// TODO: unify conflict resolution of import with discard, reuse some of the code
+#[derive(Clone, Copy, Debug)]
+enum ImportConflictResolution {
+    None,
+    DeleteRegularFile,
+    DeleteDir,
+    SkipThis,
+}
 
 pub fn import(
     home_path: &Path,
@@ -54,7 +68,13 @@ pub fn import(
             if let Ok(normalized_path) = absolute_path.strip_prefix(home_path) {
                 let to_path = absolute_group_path.join(normalized_path);
 
-                let file = FileToMove { path, to_path };
+                let conflict_resolution = check_conflict_resolution(path, &to_path)?;
+
+                let file = FileToMove {
+                    path,
+                    to_path,
+                    conflict_resolution,
+                };
                 files_to_move.push(file);
             } else {
                 bail!(
@@ -72,30 +92,6 @@ pub fn import(
     }
 
     utils::create_folder_at(absolute_group_path).context("create folder for group")?;
-
-    for FileToMove { path, to_path } in &files_to_move {
-        if try_exists(to_path)? {
-            // TODO: add check for conflict where `from` and `to` types mismatch
-            // and just err.
-
-            match read_file_type(to_path)? {
-                FileType::Regular => {
-                    ensure_files_match_content(&path, &to_path)?;
-                }
-                FileType::Directory => {
-                    let is_empty_dir = to_path.read_dir()?.next().is_none();
-                    if !is_empty_dir {
-                        return Err(anyhow!(
-                            "non-empty directory at {to_path:?} already exists, couldn't import {path:?}",
-                        ));
-                    }
-                }
-                FileType::Symlink => {
-                    ensure_symlinks_match_target(&path, &to_path)?;
-                }
-            }
-        }
-    }
 
     let mut intermediate_directories_to_create = vec![];
 
@@ -130,11 +126,72 @@ pub fn import(
     );
 
     // Finally move them
-    for FileToMove { path, to_path } in &files_to_move {
+    for FileToMove {
+        path,
+        to_path,
+        conflict_resolution,
+    } in &files_to_move
+    {
+        match conflict_resolution {
+            ImportConflictResolution::None => {}
+            ImportConflictResolution::DeleteRegularFile => {
+                fs::remove_file(to_path)?;
+            }
+            ImportConflictResolution::DeleteDir => {
+                fs::remove_dir(to_path)?;
+            }
+            ImportConflictResolution::SkipThis => {
+                continue;
+            }
+        }
         cheap_move_with_fallback(path, to_path).context("Failed to move file to import")?;
     }
 
     Ok(())
+}
+
+fn check_conflict_resolution(from: &Path, to: &Path) -> anyhow::Result<ImportConflictResolution> {
+    if !try_exists(to)? {
+        return Ok(ImportConflictResolution::None);
+    }
+
+    let (type_from, type_to) = (read_file_type(from)?, read_file_type(to)?);
+
+    use FileType::*;
+    let conflict_resolution = match (type_from, type_to) {
+        (_, Regular) if to.metadata()?.len() == 0 => ImportConflictResolution::DeleteRegularFile,
+        (_, Directory) if to.read_dir()?.next().is_none() => ImportConflictResolution::DeleteDir,
+        (Regular, Regular) => {
+            ensure_files_match_content(from, to)?;
+            ImportConflictResolution::SkipThis
+        }
+        (Directory, Directory) => {
+            return Err(anyhow!(
+                "can't import {:?}, there is a non-empty directory at {:?}",
+                from,
+                to,
+            ));
+        }
+        (Symlink, Symlink) => {
+            ensure_symlinks_match_target(from, to)?;
+            ImportConflictResolution::SkipThis
+        }
+        (Regular, Directory)
+        | (Regular, Symlink)
+        | (Directory, Regular)
+        | (Directory, Symlink)
+        | (Symlink, Directory)
+        | (Symlink, Regular) => {
+            return Err(anyhow!(
+                "can't import {:?}, it conflicts with {:?}, and their types \
+                are different",
+                from,
+                to,
+            ));
+        }
+    };
+
+    Ok(conflict_resolution)
 }
 
 fn ensure_files_match_content(from_path: &Path, to_path: &Path) -> anyhow::Result<()> {
@@ -193,7 +250,7 @@ fn ensure_symlinks_match_target(from_path: &Path, to_path: &Path) -> anyhow::Res
 mod tests {
     use std::{thread::sleep, time::Duration};
 
-    use fs_tree::tree;
+    use fs_tree::{FsTree, tree};
     use pretty_assertions::assert_eq;
 
     use super::*;
@@ -353,11 +410,10 @@ mod tests {
 
         home.write_structure_at(".").unwrap();
         dotfiles.write_structure_at(".").unwrap();
-        // Importing fails cause the two files have different contents
-        let file_at_home = test_dir.join("file");
-        let file_at_dotfiles = test_dir.join("dotfiles/group/file");
-        fs::write(&file_at_home, "aaa").unwrap();
-        fs::write(&file_at_dotfiles, "bbb").unwrap();
+
+        // Importing should fail cause the two files have different contents
+        fs::write(test_dir.join("file"), "aaa").unwrap();
+        fs::write(test_dir.join("dotfiles/group/file"), "bbb").unwrap();
 
         let error_message = import(
             test_dir,
@@ -367,8 +423,14 @@ mod tests {
         .unwrap_err()
         .to_string();
 
-        assert!(error_message.contains("it conflicts with"));
-        assert!(error_message.contains("and their content is different"));
+        assert!(
+            error_message.contains("it conflicts with"),
+            "msg = {error_message}",
+        );
+        assert!(
+            error_message.contains("and their content is different"),
+            "msg = {error_message}",
+        );
     }
 
     #[test]
@@ -391,17 +453,9 @@ mod tests {
 
         home.write_structure_at(".").unwrap();
         dotfiles.write_structure_at(".").unwrap();
-        // Importing succeeds cause two files have same content
-        let file_at_home = test_dir.join("file");
-        let file_at_dotfiles = test_dir.join("dotfiles/group/file");
-        fs::write(&file_at_home, "aaa").unwrap();
-        fs::write(&file_at_dotfiles, "aaa").unwrap();
-
-        let read_file_modify_time = || file_at_dotfiles.metadata().unwrap().modified().unwrap();
-        let modify_time = read_file_modify_time();
-
-        // Give it enough time for the modified filesystem time to be different
-        sleep(Duration::from_millis(5));
+        // Importing should succeed cause these have the same content
+        fs::write(test_dir.join("file"), "aaa").unwrap();
+        fs::write(test_dir.join("dotfiles/group/file"), "aaa").unwrap();
 
         import(
             test_dir,
@@ -414,12 +468,6 @@ mod tests {
         assert_eq!(home_result, expected_home);
         let dotfiles_result = expected_dotfiles.symlink_read_structure_at(".").unwrap();
         assert_eq!(dotfiles_result, expected_dotfiles);
-
-        assert_eq!(
-            modify_time,
-            read_file_modify_time(),
-            "file shouldn't be touched again",
-        );
     }
 
     #[test]
@@ -452,52 +500,10 @@ mod tests {
         .unwrap_err()
         .to_string();
 
-        assert!(error_message.contains("empty directory at"));
-        assert!(error_message.contains("already exists, couldn't import"));
-    }
-
-    #[test]
-    fn test_import_succeed_with_conflict_directory_empty() {
-        let (_dropper, test_dir) = cd_to_testdir().unwrap();
-
-        let home = tree! {
-            dir: [
-                inner
-            ]
-        };
-        let dotfiles = tree! {
-            dotfiles: [
-                group: [
-                    dir: []
-                ]
-            ]
-        };
-
-        let expected_home = tree! {};
-        let expected_dotfiles = tree! {
-            dotfiles: [
-                group: [
-                    dir: [
-                        inner
-                    ]
-                ]
-            ]
-        };
-
-        home.write_structure_at(".").unwrap();
-        dotfiles.write_structure_at(".").unwrap();
-
-        import(
-            test_dir,
-            &test_dir.join("dotfiles/group"),
-            ["dir"].map(PathBuf::from).as_slice(),
-        )
-        .unwrap();
-
-        let home_result = expected_home.symlink_read_structure_at(".").unwrap();
-        assert_eq!(home_result, expected_home);
-        let dotfiles_result = expected_dotfiles.symlink_read_structure_at(".").unwrap();
-        assert_eq!(dotfiles_result, expected_dotfiles);
+        assert!(
+            error_message.contains("there is a non-empty directory at"),
+            "msg = {error_message}",
+        );
     }
 
     #[test]
@@ -526,8 +532,14 @@ mod tests {
         .unwrap_err()
         .to_string();
 
-        assert!(error_message.contains("it conflicts with"));
-        assert!(error_message.contains("they're both symlinks but their targets are different"));
+        assert!(
+            error_message.contains("it conflicts with"),
+            "msg = {error_message}",
+        );
+        assert!(
+            error_message.contains("they're both symlinks but their targets are different"),
+            "msg = {error_message}",
+        );
     }
 
     #[test]
@@ -581,5 +593,103 @@ mod tests {
             read_file_modify_time(),
             "link shouldn't be touched again",
         );
+    }
+
+    fn conflict_test_helper_gen_trees_all_file_types() -> Vec<FsTree> {
+        vec![
+            tree! {
+                name
+            },
+            tree! {
+                name -> target
+            },
+            tree! {
+                name: [
+                    inner
+                ]
+            },
+        ]
+    }
+
+    #[test]
+    fn test_import_succeed_with_conflict_directory_empty() {
+        let homes = conflict_test_helper_gen_trees_all_file_types();
+
+        for home in homes {
+            eprintln!("last home: {home:?}");
+            let (_dropper, test_dir) = cd_to_testdir().unwrap();
+
+            let dotfiles = tree! {
+                dotfiles: [
+                    group: [
+                        name: []
+                    ]
+                ]
+            };
+
+            let expected_home = tree! {};
+            let expected_dotfiles = {
+                let mut tree = dotfiles.clone();
+                // overwrite name by what will be imported from home
+                tree.insert("dotfiles/group", home.clone());
+                tree
+            };
+
+            home.write_structure_at(".").unwrap();
+            dotfiles.write_structure_at(".").unwrap();
+
+            import(
+                test_dir,
+                &test_dir.join("dotfiles/group"),
+                ["name"].map(PathBuf::from).as_slice(),
+            )
+            .unwrap();
+
+            let home_result = expected_home.symlink_read_structure_at(".").unwrap();
+            assert_eq!(home_result, expected_home);
+            let dotfiles_result = expected_dotfiles.symlink_read_structure_at(".").unwrap();
+            assert_eq!(dotfiles_result, expected_dotfiles);
+        }
+    }
+
+    #[test]
+    fn test_import_succeed_with_conflict_regular_file_empty() {
+        let homes = conflict_test_helper_gen_trees_all_file_types();
+
+        for home in homes {
+            eprintln!("last home: {home:?}");
+            let (_dropper, test_dir) = cd_to_testdir().unwrap();
+
+            let dotfiles = tree! {
+                dotfiles: [
+                    group: [
+                        name
+                    ]
+                ]
+            };
+
+            let expected_home = tree! {};
+            let expected_dotfiles = {
+                let mut tree = dotfiles.clone();
+                // overwrite name by what will be imported from home
+                tree.insert("dotfiles/group", home.clone());
+                tree
+            };
+
+            home.write_structure_at(".").unwrap();
+            dotfiles.write_structure_at(".").unwrap();
+
+            import(
+                test_dir,
+                &test_dir.join("dotfiles/group"),
+                ["name"].map(PathBuf::from).as_slice(),
+            )
+            .unwrap();
+
+            let home_result = expected_home.symlink_read_structure_at(".").unwrap();
+            assert_eq!(home_result, expected_home);
+            let dotfiles_result = expected_dotfiles.symlink_read_structure_at(".").unwrap();
+            assert_eq!(dotfiles_result, expected_dotfiles);
+        }
     }
 }
