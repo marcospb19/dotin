@@ -13,9 +13,6 @@ struct FileToDiscard {
     user_given_path: PathBuf,
     absolute_dotfile_path: PathBuf,
     equivalent_home_path: PathBuf,
-    /// TODO: should we output this instead of `user_given_path`?
-    #[expect(unused)]
-    relative_path_piece: PathBuf,
     conflict_resolution: DiscardConflictResolution,
 }
 
@@ -139,7 +136,6 @@ fn prepare_discard_and_run_checks(
     Ok(FileToDiscard {
         user_given_path: path.to_owned(),
         absolute_dotfile_path,
-        relative_path_piece,
         equivalent_home_path,
         conflict_resolution,
     })
