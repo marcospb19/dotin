@@ -47,17 +47,30 @@ pub fn read_file_type(path: impl AsRef<Path>) -> Result<FileType> {
 pub fn find_dotfiles_folder(home_dir: &Path) -> Result<PathBuf> {
     const CANDIDATES: &[&str] = &["dotfiles", ".dotfiles", "dots", ".dots"];
 
+    let mut found: Vec<PathBuf> = Vec::new();
+
     for candidate in CANDIDATES {
         let path = home_dir.join(candidate);
         if try_exists(&path)? {
-            return Ok(path);
+            found.push(path);
         }
     }
 
-    Err(eyre!(
-        "No dotfiles folder found. Tried: {}",
-        CANDIDATES.join(", ")
-    ))
+    match found.len() {
+        0 => Err(eyre!(
+            "No dotfiles folder found, please create one. Tried: {}",
+            CANDIDATES.join(", ")
+        )),
+        1 => Ok(found.remove(0)),
+        _ => Err(eyre!(
+            "Multiple dotfiles folders found: {}. Please keep only one.",
+            found
+                .iter()
+                .map(|p| p.display().to_string())
+                .collect::<Vec<_>>()
+                .join(", ")
+        )),
+    }
 }
 
 pub fn get_home_dir() -> Result<PathBuf> {
