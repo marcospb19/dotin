@@ -4,7 +4,7 @@ use clap::Parser;
 use dotin::{
     Result,
     commands::{discard, import, link, unlink},
-    utils::{get_home_dir, try_exists},
+    utils::{find_dotfiles_folder, get_home_dir, try_exists},
 };
 use eyre::WrapErr;
 
@@ -33,7 +33,7 @@ fn main() -> Result<()> {
     color_eyre::install().unwrap();
 
     let home_dir = &get_home_dir()?;
-    let dotfiles_folder = home_dir.join("dotfiles");
+    let dotfiles_folder = find_dotfiles_folder(home_dir)?;
 
     // TODO: err early if given path is empty string
     // TODO: err early if trying to import or discard `"."`

@@ -44,6 +44,22 @@ pub fn read_file_type(path: impl AsRef<Path>) -> Result<FileType> {
     }
 }
 
+pub fn find_dotfiles_folder(home_dir: &Path) -> Result<PathBuf> {
+    const CANDIDATES: &[&str] = &["dotfiles", ".dotfiles", "dots", ".dots"];
+
+    for candidate in CANDIDATES {
+        let path = home_dir.join(candidate);
+        if try_exists(&path)? {
+            return Ok(path);
+        }
+    }
+
+    Err(eyre!(
+        "No dotfiles folder found. Tried: {}",
+        CANDIDATES.join(", ")
+    ))
+}
+
 pub fn get_home_dir() -> Result<PathBuf> {
     let home_env_var = env::var_os("HOME")
         .ok_or_eyre("Failed to read user's home directory, try setting $HOME")?;
