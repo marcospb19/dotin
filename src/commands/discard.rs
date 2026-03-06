@@ -1,7 +1,7 @@
 use std::path::{self, Path, PathBuf};
 
 use eyre::{WrapErr, eyre};
-use fs_err::{self as fs};
+use fs_err as fs;
 
 use crate::{
     Result,

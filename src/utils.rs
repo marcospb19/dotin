@@ -8,7 +8,7 @@ use std::{
 };
 
 use eyre::{OptionExt, WrapErr, eyre};
-use fs_err::{self as fs};
+use fs_err as fs;
 use indexmap::IndexMap;
 
 use crate::Result;
@@ -316,7 +316,7 @@ pub mod test_utils {
 }
 
 #[cfg(test)]
-mod path_trie_tests {
+mod tests {
     use std::path::Path;
 
     use super::PathTrie;

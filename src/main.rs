@@ -11,16 +11,16 @@ use eyre::WrapErr;
 #[derive(Parser, Debug)]
 #[command(version, about)]
 enum Command {
-    /// Moves files into the dotfiles group folder, doesn't link them
+    /// Moves files into a specific dotfiles group folder
     Import {
         group_name: String,
-        #[clap(required = true)]
+        #[arg(required = true)]
         files: Vec<PathBuf>,
     },
-    /// Moves files from the dotfiles group folder back to their original location (reverse operation of `dotin import`)
+    /// Move file back from a group to its target position (reverse of import)
     Discard {
         group_name: String,
-        #[clap(required = true)]
+        #[arg(required = true)]
         files: Vec<PathBuf>,
     },
     /// Link dotfiles groups into their target position
