@@ -97,14 +97,30 @@ pub fn create_symlink(link_location: &Path, original: &Path) -> Result<()> {
     })
 }
 
-/// Creates the target for a symlink at `the/relative/path` as `../../dotfiles/GROUP/the/relative/path`
-pub fn create_relative_symlink_target_path(relative_path: &Path, group_name: &str) -> PathBuf {
-    let nestedness = relative_path.components().count().saturating_sub(1);
-    let path_out_of_nesting = repeat_n(Path::new("../"), nestedness).collect::<PathBuf>();
-    path_out_of_nesting
-        .join("dotfiles")
-        .join(group_name)
-        .join(relative_path)
+/// Creates a relative target path for a symlink at `link_location` pointing to `target_path`.
+pub fn create_relative_symlink_target_path(link_location: &Path, target_path: &Path) -> PathBuf {
+    let link_parent = link_location.parent().unwrap_or(Path::new("."));
+    relative_path_from(target_path, link_parent)
+}
+
+fn relative_path_from(path: &Path, base: &Path) -> PathBuf {
+    let path_components = path.components().collect::<Vec<_>>();
+    let base_components = base.components().collect::<Vec<_>>();
+
+    let common_prefix_len = path_components
+        .iter()
+        .zip(&base_components)
+        .take_while(|(path_component, base_component)| path_component == base_component)
+        .count();
+
+    let path_out_of_base =
+        repeat_n(Path::new(".."), base_components.len() - common_prefix_len).collect::<PathBuf>();
+
+    path_components[common_prefix_len..]
+        .iter()
+        .fold(path_out_of_base, |relative, component| {
+            relative.join(component.as_os_str())
+        })
 }
 
 pub fn create_folder_at(folder_path: &Path) -> Result<()> {

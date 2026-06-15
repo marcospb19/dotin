@@ -27,7 +27,7 @@ enum ImportConflictResolution {
     SkipThis,
 }
 
-pub fn import(home_path: &Path, absolute_group_path: &Path, files: &[PathBuf]) -> Result<()> {
+pub fn import(base_path: &Path, absolute_group_path: &Path, files: &[PathBuf]) -> Result<()> {
     let dotfiles_folder = absolute_group_path
         .parent()
         .expect("Internal error, malformed dotfiles folder");
@@ -63,8 +63,8 @@ pub fn import(home_path: &Path, absolute_group_path: &Path, files: &[PathBuf]) -
                 );
             }
 
-            // Is file inside of `home_path`? If not, throw error.
-            if let Ok(normalized_path) = absolute_path.strip_prefix(home_path) {
+            // Is file inside of `base_path`? If not, throw error.
+            if let Ok(normalized_path) = absolute_path.strip_prefix(base_path) {
                 let to_path = absolute_group_path.join(normalized_path);
 
                 let conflict_resolution = check_conflict_resolution(path, &to_path)?;
@@ -77,7 +77,7 @@ pub fn import(home_path: &Path, absolute_group_path: &Path, files: &[PathBuf]) -
                 files_to_move.push(file);
             } else {
                 return Err(eyre!(
-                    "`dotin` can only import files inside of home directory {home_path:?}, \
+                    "`dotin` can only import files inside of base folder {base_path:?}, \
                      but {path:?} seems to be outside of it."
                 ));
             }
@@ -353,6 +353,54 @@ mod tests {
 
         let home_result = expected_home.symlink_read_structure_at(".").unwrap();
         assert_eq!(home_result, expected_home);
+        let dotfiles_result = expected_dotfiles.symlink_read_structure_at(".").unwrap();
+        assert_eq!(dotfiles_result, expected_dotfiles);
+    }
+
+    #[test]
+    fn test_import_with_override_base_folder() {
+        let (_dropper, test_dir) = cd_to_testdir().unwrap();
+        let base_dir = test_dir.join("base");
+
+        let base = tree! {
+            base: [
+                etc: [
+                    config
+                ]
+            ]
+        };
+        let dotfiles = tree! {
+            dotfiles: [
+                sddm: []
+            ]
+        };
+        let expected_base = tree! {
+            base: [
+                etc: []
+            ]
+        };
+        let expected_dotfiles = tree! {
+            dotfiles: [
+                sddm: [
+                    etc: [
+                        config
+                    ]
+                ]
+            ]
+        };
+
+        base.write_structure_at(".").unwrap();
+        dotfiles.write_structure_at(".").unwrap();
+
+        import(
+            &base_dir,
+            &test_dir.join("dotfiles/sddm"),
+            ["base/etc/config"].map(PathBuf::from).as_slice(),
+        )
+        .unwrap();
+
+        let base_result = expected_base.symlink_read_structure_at(".").unwrap();
+        assert_eq!(base_result, expected_base);
         let dotfiles_result = expected_dotfiles.symlink_read_structure_at(".").unwrap();
         assert_eq!(dotfiles_result, expected_dotfiles);
     }

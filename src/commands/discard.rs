@@ -25,7 +25,7 @@ enum DiscardConflictResolution {
 
 fn prepare_discard_and_run_checks(
     path: &Path,
-    home_dir: &Path,
+    base_dir: &Path,
     absolute_group_path: &Path,
 ) -> Result<FileToDiscard> {
     let absolute = path::absolute(path)?;
@@ -34,18 +34,18 @@ fn prepare_discard_and_run_checks(
     // File path must either point exactly to:
     // - A relative path pointing exactly to a file in dotfiles
     // - An absolute path pointing exactly to a file in dotfiles
-    // - A relative path pointing exactly to a symlink at home dir
-    // - An absolute path pointing exactly to a symlink at home dir
+    // - A relative path pointing exactly to a symlink at base dir
+    // - An absolute path pointing exactly to a symlink at base dir
     // - A piece of path that, when appended like `$HOME/dotfiles/dotfile_folder/{append_here}` refers to a file
     let (relative_path_piece, absolute_dotfile_path) = if try_exists(&absolute)? {
-        let stripped_home = absolute.strip_prefix(home_dir);
+        let stripped_base = absolute.strip_prefix(base_dir);
         let stripped_dotfiles = absolute.strip_prefix(absolute_group_path);
 
         if let Ok(relative) = stripped_dotfiles {
             // Lives in dotfiles, the absolute path is already what we want
             (relative.to_owned(), absolute)
-        } else if let Ok(stripped) = stripped_home {
-            // File found at home, user pointed directly to that, check if it exists in the dotfiles folder
+        } else if let Ok(stripped) = stripped_base {
+            // File found at base folder, user pointed directly to that, check if it exists in the dotfiles folder
             let joined = absolute_group_path.join(stripped);
             if !try_exists(&joined)? {
                 return Err(eyre!("couldn't find file at {joined:?} to discard"));
@@ -53,7 +53,9 @@ fn prepare_discard_and_run_checks(
 
             (stripped.to_owned(), joined)
         } else {
-            return Err(eyre!("error: given path {path:?} is outside of $HOME"));
+            return Err(eyre!(
+                "error: given path {path:?} is outside of base folder"
+            ));
         }
     } else {
         // Fallback to the last candidate, which is: path is a piece
@@ -67,7 +69,7 @@ fn prepare_discard_and_run_checks(
         (path.to_owned(), relative_path_inside_group)
     };
 
-    let equivalent_home_path = home_dir.join(&relative_path_piece);
+    let equivalent_home_path = base_dir.join(&relative_path_piece);
 
     let conflict_resolution = 'conflict_check: {
         // TODO: add check for conflict where `from` and `to` types mismatch
@@ -78,10 +80,11 @@ fn prepare_discard_and_run_checks(
             let file_type = read_file_type(&equivalent_home_path)?;
 
             if let (a, b) = (
-                read_file_type(path)?,
+                read_file_type(&absolute_dotfile_path)?,
                 read_file_type(&equivalent_home_path)?,
             ) && a != b
                 && b != FileType::Directory
+                && b != FileType::Symlink
             {
                 return Err(eyre!(
                     "can't discard {path:?}, it conflicts with {equivalent_home_path:?}, \
@@ -114,10 +117,18 @@ fn prepare_discard_and_run_checks(
                 }
                 FileType::Symlink => {
                     let target = fs::read_link(&equivalent_home_path)?;
+                    let absolute_target = if target.is_absolute() {
+                        target.clone()
+                    } else {
+                        equivalent_home_path
+                            .parent()
+                            .unwrap_or(Path::new("."))
+                            .join(&target)
+                    };
 
                     // Allow discarding into a symlink if it's pointing to the same file we're discarding
                     // (likely linked by dotin itself)
-                    if let Ok(canonicalized) = fs::canonicalize(&target)
+                    if let Ok(canonicalized) = fs::canonicalize(&absolute_target)
                         && canonicalized == absolute_dotfile_path
                     {
                         break 'conflict_check DiscardConflictResolution::DeleteSymlink;
@@ -141,11 +152,11 @@ fn prepare_discard_and_run_checks(
     })
 }
 
-pub fn discard(home_dir: &Path, absolute_group_path: &Path, paths: &[PathBuf]) -> Result<()> {
+pub fn discard(base_dir: &Path, absolute_group_path: &Path, paths: &[PathBuf]) -> Result<()> {
     let files_to_discard = {
         let mut files: Vec<FileToDiscard> = paths
             .iter()
-            .map(|path| prepare_discard_and_run_checks(path, home_dir, absolute_group_path))
+            .map(|path| prepare_discard_and_run_checks(path, base_dir, absolute_group_path))
             .collect::<Result<_>>()?;
 
         if files.is_empty() {
@@ -340,6 +351,58 @@ pub mod tests {
 
         let home_result = expected_home.symlink_read_structure_at(".").unwrap();
         assert_eq!(home_result, expected_home);
+        let dotfiles_result = expected_dotfiles.symlink_read_structure_at(".").unwrap();
+        assert_eq!(dotfiles_result, expected_dotfiles);
+    }
+
+    #[test]
+    fn test_discard_with_override_base_folder_and_relative_symlink() {
+        let (_dropper, test_dir) = cd_to_testdir().unwrap();
+        let base_dir = test_dir.join("base");
+
+        let base = tree! {
+            base: [
+                etc: [
+                    config -> "../../dotfiles/sddm/etc/config"
+                ]
+            ]
+        };
+        let dotfiles = tree! {
+            dotfiles: [
+                sddm: [
+                    etc: [
+                        config
+                    ]
+                ]
+            ]
+        };
+        let expected_base = tree! {
+            base: [
+                etc: [
+                    config
+                ]
+            ]
+        };
+        let expected_dotfiles = tree! {
+            dotfiles: [
+                sddm: [
+                    etc: []
+                ]
+            ]
+        };
+
+        base.write_structure_at(".").unwrap();
+        dotfiles.write_structure_at(".").unwrap();
+
+        discard(
+            &base_dir,
+            &test_dir.join("dotfiles/sddm"),
+            ["etc/config"].map(PathBuf::from).as_slice(),
+        )
+        .unwrap();
+
+        let base_result = expected_base.symlink_read_structure_at(".").unwrap();
+        assert_eq!(base_result, expected_base);
         let dotfiles_result = expected_dotfiles.symlink_read_structure_at(".").unwrap();
         assert_eq!(dotfiles_result, expected_dotfiles);
     }

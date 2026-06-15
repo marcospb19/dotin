@@ -4,9 +4,10 @@ use clap::Parser;
 use dotin::{
     Result,
     commands::{discard, import, link, unlink},
+    config::{init_config, read_config},
     utils::{find_dotfiles_folder, get_home_dir, try_exists},
 };
-use eyre::WrapErr;
+use eyre::{WrapErr, bail};
 
 #[derive(Parser, Debug)]
 #[command(version, about)]
@@ -27,6 +28,11 @@ enum Command {
     Link { groups: Vec<String> },
     /// Removes links created by the `link` command
     Unlink { groups: Vec<String> },
+    /// Create config, or check its location
+    Config {
+        #[arg(short, long)]
+        init: bool,
+    },
 }
 
 fn main() -> Result<()> {
@@ -34,10 +40,18 @@ fn main() -> Result<()> {
 
     let home_dir = &get_home_dir()?;
     let dotfiles_folder = find_dotfiles_folder(home_dir)?;
+    let config = read_config(home_dir, &dotfiles_folder).wrap_err("Failed to read config")?;
 
-    // TODO: err early if given path is empty string
-    // TODO: err early if trying to import or discard `"."`
-    match Command::parse() {
+    let command = Command::parse();
+
+    // err early if trying to import or discard `"."`
+    if let Command::Import { files, .. } | Command::Discard { files, .. } = &command
+        && files.iter().find(|&file| file == ".").is_some()
+    {
+        bail!("Cannot import or discard the current directory (\".\")");
+    }
+
+    match command {
         Command::Unlink { groups } => {
             if groups.is_empty() {
                 println!("list of groups to unlink is empty.");
@@ -45,7 +59,9 @@ fn main() -> Result<()> {
             }
 
             for group in &groups {
-                unlink(home_dir, &dotfiles_folder.join(group), group)
+                let base_folder = config.inner.base_folder_for_group(home_dir, group);
+
+                unlink(&base_folder, &dotfiles_folder.join(group))
                     .wrap_err_with(|| format!("Failed to unlink group \"{group}\""))?;
             }
         }
@@ -56,14 +72,17 @@ fn main() -> Result<()> {
 
             for group in &groups {
                 let dotfiles_group_folder = &dotfiles_folder.join(group);
+                let base_folder = config.inner.base_folder_for_group(home_dir, group);
 
-                link(home_dir, dotfiles_group_folder, group)
+                link(&base_folder, dotfiles_group_folder)
                     .wrap_err_with(|| format!("Failed to link group \"{group}\""))?;
             }
         }
         Command::Import { group_name, files } => {
             assert!(!files.is_empty(), "ensured by CLI definitions");
-            import(home_dir, &dotfiles_folder.join(&group_name), &files)
+            let base_folder = config.inner.base_folder_for_group(home_dir, &group_name);
+
+            import(&base_folder, &dotfiles_folder.join(&group_name), &files)
                 .wrap_err_with(|| format!("Failed to import files for group \"{group_name}\""))?;
         }
         Command::Discard { group_name, files } => {
@@ -75,8 +94,22 @@ fn main() -> Result<()> {
                 );
                 return Ok(());
             }
-            discard(home_dir, &dotfiles_folder.join(&group_name), &files)
+            let base_folder = config.inner.base_folder_for_group(home_dir, &group_name);
+
+            discard(&base_folder, &dotfiles_folder.join(&group_name), &files)
                 .wrap_err_with(|| format!("Failed to discard files for group \"{group_name}\""))?;
+        }
+        Command::Config { init } => {
+            if init {
+                init_config(home_dir, &dotfiles_folder)?;
+            } else if config.path.is_some() {
+                println!(
+                    "Config file set at {}",
+                    config.path.as_ref().unwrap().display()
+                );
+            } else {
+                println!("No config file set. Run `dotin config --init` to create one.");
+            }
         }
     }
 
