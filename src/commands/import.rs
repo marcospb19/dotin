@@ -256,7 +256,7 @@ mod tests {
     use pretty_assertions::assert_eq;
 
     use super::*;
-    use crate::utils::test_utils::cd_to_testdir;
+    use crate::{commands::link::link, utils::test_utils::cd_to_testdir};
 
     #[test]
     fn test_import() {
@@ -739,5 +739,59 @@ mod tests {
             let dotfiles_result = expected_dotfiles.symlink_read_structure_at(".").unwrap();
             assert_eq!(dotfiles_result, expected_dotfiles);
         }
+    }
+
+    #[test]
+    fn test_import_and_link() {
+        let (_dropper, test_dir) = cd_to_testdir().unwrap();
+
+        let home = tree! {
+            ".config": [
+                my_app: [
+                    config
+                ]
+            ]
+        };
+        let dotfiles = tree! {
+            dotfiles: [
+                mygroup: []
+            ]
+        };
+
+        let expected_home = tree! {
+            ".config": [
+                my_app: [
+                    config -> "../../dotfiles/mygroup/.config/my_app/config"
+                ]
+            ]
+        };
+        let expected_dotfiles = tree! {
+            dotfiles: [
+                mygroup: [
+                    ".config": [
+                        my_app: [
+                            config
+                        ]
+                    ]
+                ]
+            ]
+        };
+
+        home.write_structure_at(".").unwrap();
+        dotfiles.write_structure_at(".").unwrap();
+
+        import(
+            test_dir,
+            &test_dir.join("dotfiles/mygroup"),
+            &[".config/my_app/config"].map(PathBuf::from),
+        )
+        .unwrap();
+
+        link(test_dir, &test_dir.join("dotfiles/mygroup")).unwrap();
+
+        let home_result = expected_home.symlink_read_structure_at(".").unwrap();
+        assert_eq!(home_result, expected_home);
+        let dotfiles_result = expected_dotfiles.symlink_read_structure_at(".").unwrap();
+        assert_eq!(dotfiles_result, expected_dotfiles);
     }
 }

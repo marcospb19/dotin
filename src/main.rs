@@ -12,11 +12,14 @@ use eyre::{WrapErr, bail};
 #[derive(Parser, Debug)]
 #[command(version, about)]
 enum Command {
-    /// Moves files into a specific dotfiles group folder
+    /// Moves files into a specific dotfiles group folder and links them back
     Import {
         group_name: String,
         #[arg(required = true)]
         files: Vec<PathBuf>,
+        /// Skip linking files back to their original location after import
+        #[arg(long)]
+        no_link: bool,
     },
     /// Move file back from a group to its target position (reverse of import)
     Discard {
@@ -78,12 +81,22 @@ fn main() -> Result<()> {
                     .wrap_err_with(|| format!("Failed to link group \"{group}\""))?;
             }
         }
-        Command::Import { group_name, files } => {
+        Command::Import {
+            group_name,
+            files,
+            no_link,
+        } => {
             assert!(!files.is_empty(), "ensured by CLI definitions");
             let base_folder = config.inner.base_folder_for_group(home_dir, &group_name);
+            let group_folder = dotfiles_folder.join(&group_name);
 
-            import(&base_folder, &dotfiles_folder.join(&group_name), &files)
+            import(&base_folder, &group_folder, &files)
                 .wrap_err_with(|| format!("Failed to import files for group \"{group_name}\""))?;
+
+            if !no_link {
+                link(&base_folder, &group_folder)
+                    .wrap_err_with(|| format!("Failed to link group \"{group_name}\""))?;
+            }
         }
         Command::Discard { group_name, files } => {
             assert!(!files.is_empty(), "ensured by CLI definitions");
