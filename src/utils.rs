@@ -186,10 +186,14 @@ pub fn copy_path(from: &Path, to: &Path) -> Result<()> {
     }
 
     let mut stack = vec![(from.to_owned(), to.to_owned())];
+    let mut directories = Vec::new();
 
     while let Some((from, to)) = stack.pop() {
         match read_file_type(&from)? {
             FileType::Directory => {
+                // create_dir_all applies the process umask, so save the source
+                // permissions and restore them after all children are copied.
+                directories.push((to.clone(), fs::symlink_metadata(&from)?.permissions()));
                 fs::create_dir_all(&to)?;
                 for entry in fs::read_dir(&from)? {
                     let path = entry?.path();
@@ -205,6 +209,10 @@ pub fn copy_path(from: &Path, to: &Path) -> Result<()> {
                 create_symlink(&to, &fs::read_link(&from)?)?;
             }
         }
+    }
+
+    for (directory, permissions) in directories {
+        fs::set_permissions(directory, permissions)?;
     }
 
     Ok(())
@@ -347,9 +355,42 @@ pub mod test_utils {
 
 #[cfg(test)]
 mod tests {
-    use std::path::Path;
+    use std::{fs::Permissions, os::unix::fs::PermissionsExt, path::Path};
 
-    use super::PathTrie;
+    use fs_err as fs;
+
+    use super::{PathTrie, copy_path};
+
+    #[test]
+    fn test_copy_path_preserves_directory_permissions() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let source = tempdir.path().join("source");
+        let nested = source.join("nested");
+        fs::create_dir_all(&nested).unwrap();
+        fs::write(nested.join("file"), "contents").unwrap();
+        fs::set_permissions(&nested, Permissions::from_mode(0o705)).unwrap();
+        fs::set_permissions(&source, Permissions::from_mode(0o751)).unwrap();
+
+        let destination = tempdir.path().join("destination");
+        copy_path(&source, &destination).unwrap();
+
+        assert_eq!(
+            fs::symlink_metadata(&destination)
+                .unwrap()
+                .permissions()
+                .mode()
+                & 0o7777,
+            0o751
+        );
+        assert_eq!(
+            fs::symlink_metadata(destination.join("nested"))
+                .unwrap()
+                .permissions()
+                .mode()
+                & 0o7777,
+            0o705
+        );
+    }
 
     #[test]
     fn test_path_trie_contains_ancestor_of() {
