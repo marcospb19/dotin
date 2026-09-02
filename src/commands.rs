@@ -5,7 +5,7 @@ mod unlink;
 
 pub use self::{
     discard::discard,
-    import::{ImportMode, import, import_with_mode},
+    import::{ImportMode, import},
     link::link,
     unlink::unlink,
 };

@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use clap::Parser;
 use dotin::{
     Result,
-    commands::{ImportMode, discard, import, import_with_mode, link, unlink},
+    commands::{ImportMode, discard, import, link, unlink},
     config::{init_config, read_config},
     utils::{find_dotfiles_folder, get_home_dir, try_exists},
 };
@@ -90,15 +90,15 @@ fn main() -> Result<()> {
             let base_folder = config.inner.base_folder_for_group(home_dir, &group_name);
             let group_folder = dotfiles_folder.join(&group_name);
 
-            if copy {
-                import_with_mode(&base_folder, &group_folder, &files, ImportMode::Copy)
-                    .wrap_err_with(|| {
-                        format!("Failed to import files for group \"{group_name}\"")
-                    })?;
+            let mode = if copy {
+                ImportMode::Copy
             } else {
-                import(&base_folder, &group_folder, &files).wrap_err_with(|| {
-                    format!("Failed to import files for group \"{group_name}\"")
-                })?;
+                ImportMode::Move
+            };
+            import(&base_folder, &group_folder, &files, mode)
+                .wrap_err_with(|| format!("Failed to import files for group \"{group_name}\""))?;
+
+            if mode == ImportMode::Move {
                 link(&base_folder, &group_folder)
                     .wrap_err_with(|| format!("Failed to link group \"{group_name}\""))?;
             }

@@ -33,11 +33,7 @@ enum ImportConflictResolution {
     SkipThis,
 }
 
-pub fn import(base_path: &Path, absolute_group_path: &Path, files: &[PathBuf]) -> Result<()> {
-    import_with_mode(base_path, absolute_group_path, files, ImportMode::Move)
-}
-
-pub fn import_with_mode(
+pub fn import(
     base_path: &Path,
     absolute_group_path: &Path,
     files: &[PathBuf],
@@ -381,6 +377,7 @@ mod tests {
             test_dir,
             &test_dir.join("dotfiles/group_name"),
             &files_to_import,
+            ImportMode::Move,
         )
         .unwrap();
 
@@ -429,6 +426,7 @@ mod tests {
             &base_dir,
             &test_dir.join("dotfiles/sddm"),
             ["base/etc/config"].map(PathBuf::from).as_slice(),
+            ImportMode::Move,
         )
         .unwrap();
 
@@ -467,6 +465,7 @@ mod tests {
             test_dir,
             &test_dir.join("dotfiles/group"),
             ["link"].map(PathBuf::from).as_slice(),
+            ImportMode::Move,
         )
         .unwrap();
 
@@ -502,6 +501,7 @@ mod tests {
             test_dir,
             &test_dir.join("dotfiles/group"),
             ["file"].map(PathBuf::from).as_slice(),
+            ImportMode::Move,
         )
         .unwrap_err()
         .to_string();
@@ -544,6 +544,7 @@ mod tests {
             test_dir,
             &test_dir.join("dotfiles/group"),
             ["file"].map(PathBuf::from).as_slice(),
+            ImportMode::Move,
         )
         .unwrap();
 
@@ -583,6 +584,7 @@ mod tests {
             test_dir,
             &test_dir.join("dotfiles/group"),
             ["dir"].map(PathBuf::from).as_slice(),
+            ImportMode::Move,
         )
         .unwrap_err()
         .to_string();
@@ -615,6 +617,7 @@ mod tests {
             test_dir,
             &test_dir.join("dotfiles/group"),
             ["link"].map(PathBuf::from).as_slice(),
+            ImportMode::Move,
         )
         .unwrap_err()
         .to_string();
@@ -665,6 +668,7 @@ mod tests {
             test_dir,
             &test_dir.join("dotfiles/group"),
             ["link"].map(PathBuf::from).as_slice(),
+            ImportMode::Move,
         )
         .unwrap();
 
@@ -727,6 +731,7 @@ mod tests {
                 test_dir,
                 &test_dir.join("dotfiles/group"),
                 ["name"].map(PathBuf::from).as_slice(),
+                ImportMode::Move,
             )
             .unwrap();
 
@@ -768,6 +773,7 @@ mod tests {
                 test_dir,
                 &test_dir.join("dotfiles/group"),
                 ["name"].map(PathBuf::from).as_slice(),
+                ImportMode::Move,
             )
             .unwrap();
 
@@ -789,7 +795,7 @@ mod tests {
         fs::write(source.join("nested/settings"), "original").unwrap();
         utils::create_symlink(&source.join("settings-link"), Path::new("nested/settings")).unwrap();
 
-        import_with_mode(
+        import(
             test_dir,
             &group,
             std::slice::from_ref(&source),
@@ -833,7 +839,7 @@ mod tests {
         fs::write(test_dir.join("file"), "same").unwrap();
         fs::write(group.join("file"), "same").unwrap();
 
-        import_with_mode(test_dir, &group, &[PathBuf::from("file")], ImportMode::Copy).unwrap();
+        import(test_dir, &group, &[PathBuf::from("file")], ImportMode::Copy).unwrap();
 
         assert_eq!(fs::read_to_string(test_dir.join("file")).unwrap(), "same");
         assert_eq!(fs::read_to_string(group.join("file")).unwrap(), "same");
@@ -882,6 +888,7 @@ mod tests {
             test_dir,
             &test_dir.join("dotfiles/mygroup"),
             &[".config/my_app/config"].map(PathBuf::from),
+            ImportMode::Move,
         )
         .unwrap();
 
