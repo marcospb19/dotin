@@ -8,8 +8,14 @@ use fs_err as fs;
 
 use crate::{
     Result,
-    utils::{self, FileType, cheap_move_with_fallback, read_file_type, try_exists},
+    utils::{self, FileType, cheap_move_with_fallback, copy_path, read_file_type, try_exists},
 };
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ImportMode {
+    Move,
+    Copy,
+}
 
 #[derive(Debug)]
 struct FileToMove<'a> {
@@ -28,6 +34,15 @@ enum ImportConflictResolution {
 }
 
 pub fn import(base_path: &Path, absolute_group_path: &Path, files: &[PathBuf]) -> Result<()> {
+    import_with_mode(base_path, absolute_group_path, files, ImportMode::Move)
+}
+
+pub fn import_with_mode(
+    base_path: &Path,
+    absolute_group_path: &Path,
+    files: &[PathBuf],
+    mode: ImportMode,
+) -> Result<()> {
     let dotfiles_folder = absolute_group_path
         .parent()
         .expect("Internal error, malformed dotfiles folder");
@@ -87,7 +102,7 @@ pub fn import(base_path: &Path, absolute_group_path: &Path, files: &[PathBuf]) -
     };
 
     if files_to_move.is_empty() {
-        println!("No files to move.");
+        println!("No files to import.");
     }
 
     utils::create_folder_at(absolute_group_path).wrap_err("create folder for group")?;
@@ -120,12 +135,16 @@ pub fn import(base_path: &Path, absolute_group_path: &Path, files: &[PathBuf]) -
         }
     }
 
+    let operation_str = match mode {
+        ImportMode::Move => "move",
+        ImportMode::Copy => "copy",
+    };
     println!(
-        "Will move {} files: {files_to_move:#?}",
+        "Will {operation_str} {} files: {files_to_move:#?}",
         files_to_move.len(),
     );
 
-    // Finally move them
+    // Finally import them
     for FileToMove {
         path,
         to_path,
@@ -141,10 +160,24 @@ pub fn import(base_path: &Path, absolute_group_path: &Path, files: &[PathBuf]) -
                 fs::remove_dir(to_path)?;
             }
             ImportConflictResolution::SkipThis => {
+                if mode == ImportMode::Move {
+                    fs::remove_file(path).wrap_err(
+                        "Failed to remove source that already exists in the dotfiles group",
+                    )?;
+                }
                 continue;
             }
         }
-        cheap_move_with_fallback(path, to_path).wrap_err("Failed to move file to import")?;
+
+        match mode {
+            ImportMode::Move => {
+                cheap_move_with_fallback(path, to_path)
+                    .wrap_err("Failed to move file to import")?;
+            }
+            ImportMode::Copy => {
+                copy_path(path, to_path).wrap_err("Failed to copy file to import")?;
+            }
+        }
     }
 
     Ok(())
@@ -516,6 +549,10 @@ mod tests {
 
         let home_result = expected_home.symlink_read_structure_at(".").unwrap();
         assert_eq!(home_result, expected_home);
+        assert!(
+            !try_exists(test_dir.join("file")).unwrap(),
+            "the redundant source must be removed so it can be linked"
+        );
         let dotfiles_result = expected_dotfiles.symlink_read_structure_at(".").unwrap();
         assert_eq!(dotfiles_result, expected_dotfiles);
     }
@@ -739,6 +776,67 @@ mod tests {
             let dotfiles_result = expected_dotfiles.symlink_read_structure_at(".").unwrap();
             assert_eq!(dotfiles_result, expected_dotfiles);
         }
+    }
+
+    #[test]
+    fn test_copy_import_retains_source_and_preserves_tree_types() {
+        let (_dropper, test_dir) = cd_to_testdir().unwrap();
+        let source = test_dir.join("config");
+        let group = test_dir.join("dotfiles/group");
+
+        fs::create_dir_all(source.join("nested/empty")).unwrap();
+        fs::create_dir_all(&group).unwrap();
+        fs::write(source.join("nested/settings"), "original").unwrap();
+        utils::create_symlink(&source.join("settings-link"), Path::new("nested/settings")).unwrap();
+
+        import_with_mode(
+            test_dir,
+            &group,
+            std::slice::from_ref(&source),
+            ImportMode::Copy,
+        )
+        .unwrap();
+
+        let copied = group.join("config");
+        assert!(source.is_dir(), "copy import must retain the source");
+        assert_eq!(
+            fs::read_to_string(source.join("nested/settings")).unwrap(),
+            "original"
+        );
+        assert_eq!(
+            fs::read_to_string(copied.join("nested/settings")).unwrap(),
+            "original"
+        );
+        assert!(copied.join("nested/empty").is_dir());
+        assert_eq!(
+            read_file_type(copied.join("settings-link")).unwrap(),
+            FileType::Symlink
+        );
+        assert_eq!(
+            fs::read_link(copied.join("settings-link")).unwrap(),
+            Path::new("nested/settings")
+        );
+
+        fs::write(copied.join("nested/settings"), "changed copy").unwrap();
+        assert_eq!(
+            fs::read_to_string(source.join("nested/settings")).unwrap(),
+            "original",
+            "the source and imported copy must be independent"
+        );
+    }
+
+    #[test]
+    fn test_copy_import_skips_identical_destination_without_removing_source() {
+        let (_dropper, test_dir) = cd_to_testdir().unwrap();
+        let group = test_dir.join("dotfiles/group");
+        fs::create_dir_all(&group).unwrap();
+        fs::write(test_dir.join("file"), "same").unwrap();
+        fs::write(group.join("file"), "same").unwrap();
+
+        import_with_mode(test_dir, &group, &[PathBuf::from("file")], ImportMode::Copy).unwrap();
+
+        assert_eq!(fs::read_to_string(test_dir.join("file")).unwrap(), "same");
+        assert_eq!(fs::read_to_string(group.join("file")).unwrap(), "same");
     }
 
     #[test]

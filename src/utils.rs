@@ -153,15 +153,19 @@ pub fn cheap_move_with_fallback(from: &Path, to: &Path) -> Result<()> {
     }
 
     if let Err(err) = fs::rename(from, to) {
-        // if renaming (cheapest move) is impossible, try fallback
+        // If renaming (the cheapest move) is impossible, copy the complete
+        // entry first and only remove the source after the copy succeeds.
         if err.kind() == io::ErrorKind::CrossesDevices {
-            if let FileType::Directory = read_file_type(from)? {
-                // dir fallback
-                expensive_folder_copy(from.to_owned(), to.to_owned())?;
-            } else {
-                // non-dir fallback
-                fs::copy(from, to).wrap_err("while trying to move file")?;
-                fs::remove_file(from).wrap_err("removing file after copy (mv operation)")?;
+            let file_type = read_file_type(from)?;
+            copy_path(from, to).wrap_err("while trying to move file across filesystems")?;
+            match file_type {
+                FileType::Directory => {
+                    fs::remove_dir_all(from)
+                        .wrap_err("removing directory after copy (mv operation)")?;
+                }
+                FileType::Regular | FileType::Symlink => {
+                    fs::remove_file(from).wrap_err("removing file after copy (mv operation)")?;
+                }
             }
         } else {
             return Err(err.into());
@@ -170,26 +174,36 @@ pub fn cheap_move_with_fallback(from: &Path, to: &Path) -> Result<()> {
     Ok(())
 }
 
-fn expensive_folder_copy(from: PathBuf, to: PathBuf) -> Result<()> {
-    // Use a stack to avoid too-many-files error (this can't ever stack
-    // overflow due to Linux's path size limit)
-    let mut stack = Vec::new();
-    stack.push((from, to));
+/// Copies a filesystem entry while retaining the source.
+///
+/// Directories are copied recursively and symlinks are reproduced without
+/// dereferencing their targets.
+pub fn copy_path(from: &Path, to: &Path) -> Result<()> {
+    if let Some(to_parent) = to.parent()
+        && !try_exists(to_parent)?
+    {
+        fs::create_dir_all(to_parent)?;
+    }
+
+    let mut stack = vec![(from.to_owned(), to.to_owned())];
 
     while let Some((from, to)) = stack.pop() {
-        if fs::symlink_metadata(&from)?.is_dir() {
-            fs::create_dir_all(&to)?;
-            for entry in fs::read_dir(from)? {
-                let entry = entry?;
-                let path = entry.path();
-                // Unwrap Safety:
-                //   A path retrieved by readdir always has a file_name
-                let name = path.file_name().unwrap();
-                let dest = to.join(name);
-                stack.push((path, dest));
+        match read_file_type(&from)? {
+            FileType::Directory => {
+                fs::create_dir_all(&to)?;
+                for entry in fs::read_dir(&from)? {
+                    let path = entry?.path();
+                    // A path returned by read_dir always has a file name.
+                    let destination = to.join(path.file_name().unwrap());
+                    stack.push((path, destination));
+                }
             }
-        } else {
-            fs::copy(from, to)?;
+            FileType::Regular => {
+                fs::copy(&from, &to)?;
+            }
+            FileType::Symlink => {
+                create_symlink(&to, &fs::read_link(&from)?)?;
+            }
         }
     }
 
