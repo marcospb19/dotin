@@ -34,7 +34,7 @@ Say you were configuring `polybar` and `zsh`, and ended up creating these config
         └── launch.sh  (new, polybar)
 ```
 
-We'll explain how to use `dotin` to organize this into two folders inside `~/dotfiles`:
+We'll use `dotin` to organize this into two folders inside `~/dotfiles`:
 
 ```ruby
 ~/dotfiles/
@@ -44,11 +44,9 @@ We'll explain how to use `dotin` to organize this into two folders inside `~/dot
     └── ...
 ```
 
-The files will be organized into two groups, `zsh` and `polybar`.
-
 ## Importing the files
 
-To import, first pass the group name, then provide the files to be imported.
+To import the files into the `~/dotfiles/` we must provide the group name, the given files will go into `~/dotfiles/GROUP/`:
 
 ```sh
 dotin import zsh .zprofile
@@ -57,9 +55,9 @@ dotin import zsh .zshrc
 dotin import zsh .zprofile .zshrc
 ```
 
-If they don't exist already, `dotin` will create both folders `~/dotfiles/` and `~/dotfiles/zsh/`, then move the files inside.
+If they don't exist, `dotin` will create both `~/dotfiles/` and `~/dotfiles/zsh/` before importing the files.
 
-Here is what it looks like:
+Here is the current `~/dotfiles` structure:
 
 ```ruby
 ~/dotfiles/
@@ -68,13 +66,15 @@ Here is what it looks like:
     └── .zshrc
 ```
 
-Even though your files were moved, everything works like before because the files were sym-linked to their original location, here is what's in your HOME now.
+We moved the files, but `zsh` still works like before because `dotin` created _symlinks_ back at their original location:
 
 ```ruby
 ~
 ├── .zprofile -> ~/dotfiles/zsh/.zprofile
 └── .zshrc    -> ~/dotfiles/zsh/.zshrc
 ```
+
+Because we use symlinks, if you edit `~/.zprofile` or `~/.zshrc`, your editor will edit the real file inside `~/dotfiles/zsh/`.
 
 Now, let's do the same thing for `polybar`:
 
@@ -96,11 +96,11 @@ So now we get:
             └── launch.sh
 ```
 
-Like before, it's all linked and working, now, if you try to edit the files at your home, you'll actually end up editing the files inside of `~/dotfiles`.
+By organizing the files in this structure, `dotin` knows what their original location was.
 
 ## Sync With GitHub
 
-With all configs living inside a single folder, we can easily turn it into a repository and back them up using `git` and `GitHub`:
+With all configs inside the `~/dotfiles` folder, now we can turn it into a repository using `git`:
 
 ```sh
 # Just the usual GitHub repository setup
@@ -112,30 +112,29 @@ git remote add origin <REPOSITORY_URL>
 git push -u origin HEAD
 ```
 
+Done, your configs are backed up.
+
 ## Reapplying Configs In a New Machine
 
-With `dotin` installed, you can re-apply all configs:
+Requirements: `dotin` and `git`:
 
 ```sh
-git clone URL
-cd dotfiles
+git clone <REPOSITORY_URL>
 dotin link zsh
 dotin link polybar
 ```
 
 Done, files are linked to the correct locations (conflicts are reported, if any).
 
-If you're in a hurry and don't want to install `dotin`, try using `stow` instead:
+Alternatively, you can link using `stow` instead of `dotin`:
 
 ```sh
-# Installation for Debian-based and Ubuntu-based
+# stow is more widely available
 sudo apt install stow
-# Installation for Arch-based
-sudo pacman -S stow
-
-# stow requires that you are inside your dotfiles (or, use some flag)
+# `stow` requires you to either be inside the folder or provide flags
 cd ~/dotfiles
-stow polybar # same as `dotin link polybar`
+# same as `dotin link polybar`
+stow polybar 
 ```
 
 # Differences from `stow`
@@ -150,7 +149,7 @@ Both tools are still similar, `dotin` is under development and there is a lot to
 
 # Known Issues
 
-- `dotin` fails when dealing with exoteric file types.
+- `dotin` fails when dealing with unusual file types.
 
 # Non-goals
 
